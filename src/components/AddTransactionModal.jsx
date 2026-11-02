@@ -35,7 +35,7 @@ function blankForm() {
     mode: 'expense',
     amount: '',
     categoryId: 'food',
-    source: 'upi', // 'upi' | 'upiLite' | 'cash' | 'friend'
+    source: 'upiLite', // 'upi' | 'upiLite' | 'cash' | 'friend'
     friendId: '',
     yourShare: '',
     splitOpen: false,
