@@ -21,7 +21,7 @@ function swipeThreshold() {
  * One row of the master transaction list. Every row is tappable to edit
  * (or delete) the underlying record — edits/deletes retroactively recalculate
  * account balances, friend nets and monthly totals because everything derives
- * from this list. Swiping the row to the right (Spotify/Messages style)
+ * from this list. Swiping the row to the left (Spotify/Messages style)
  * reveals an emerald Duplicate action and, past the threshold, clones the
  * transaction onto right now.
  */
@@ -98,7 +98,7 @@ export default function TransactionRow({ tx, category, friend, onOpen, onDuplica
   const categoryLabel =
     tx.type === 'expense' || tx.type === 'forgive' ? (category?.name ?? '') : '';
 
-  // --- Swipe-right-to-duplicate gesture (vanilla touch events) -------------
+  // --- Swipe-left-to-duplicate gesture (vanilla touch events) --------------
   const [offset, setOffset] = useState(0);
   const [dragging, setDragging] = useState(false);
   const gesture = useRef({ active: false, startX: 0, startY: 0, axis: null });
@@ -140,16 +140,16 @@ export default function TransactionRow({ tx, category, friend, onOpen, onDuplica
     }
 
     const threshold = swipeThreshold();
-    const raw = Math.max(0, dx);
+    const raw = Math.min(0, dx); // leftward drag → negative delta
     // 1:1 tracking up to the threshold, rubber-band resistance past it.
-    const next = Math.min(
-      raw > threshold ? threshold + (raw - threshold) * 0.25 : raw,
-      threshold + 70,
+    const next = Math.max(
+      raw < -threshold ? -threshold + (raw + threshold) * 0.25 : raw,
+      -(threshold + 70),
     );
     applyOffset(next);
 
     // One light haptic the moment the action locks in.
-    if (!crossedRef.current && next >= threshold) {
+    if (!crossedRef.current && next <= -threshold) {
       crossedRef.current = true;
       swipedRef.current = true;
       if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
@@ -159,7 +159,7 @@ export default function TransactionRow({ tx, category, friend, onOpen, onDuplica
   };
 
   const handleTouchEnd = () => {
-    const fire = crossedRef.current && offsetRef.current >= swipeThreshold();
+    const fire = crossedRef.current && offsetRef.current <= -swipeThreshold();
     gesture.current.active = false;
     gesture.current.axis = null;
     setDragging(false);
@@ -181,7 +181,7 @@ export default function TransactionRow({ tx, category, friend, onOpen, onDuplica
   };
 
   // How much of the hidden Duplicate layer is revealed (0 → 1).
-  const reveal = Math.min(offset / swipeThreshold(), 1);
+  const reveal = Math.min(Math.abs(offset) / swipeThreshold(), 1);
 
   return (
     <button
@@ -193,10 +193,10 @@ export default function TransactionRow({ tx, category, friend, onOpen, onDuplica
       onTouchCancel={handleTouchEnd}
       className="relative w-full touch-pan-y overflow-hidden border-b border-zinc-800/60 text-left transition active:bg-zinc-900/70"
     >
-      {/* Hidden action layer, revealed by swiping the row right */}
+      {/* Hidden action layer, revealed by swiping the row left */}
       <span
         aria-hidden="true"
-        className="absolute inset-0 flex items-center gap-2 pl-4 text-emerald-400"
+        className="absolute inset-0 flex items-center justify-end gap-2 pr-4 text-emerald-400"
         style={{ opacity: reveal }}
       >
         <Copy className="h-5 w-5" />
