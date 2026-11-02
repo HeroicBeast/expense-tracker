@@ -2,10 +2,18 @@ import { createContext, useContext, useEffect, useMemo, useReducer, useRef, useS
 import { createInitialState, newId, MISC_CATEGORY_ID } from '../lib/defaults.js';
 import { loadStateAsync, loadStateSync, saveState } from '../lib/storage.js';
 import { round2 } from '../lib/money.js';
+import {
+  AUDIT_ACTIONS,
+  describeBalanceChange,
+  describeTransactionContent,
+  describeTransactionEdit,
+  makeAuditEntry,
+  withAuditEntries,
+} from '../lib/audit.js';
 
 const AppContext = createContext(null);
 
-function reducer(state, action) {
+export function reducer(state, action) {
   switch (action.type) {
     case 'HYDRATE':
       return action.state;
@@ -16,16 +24,29 @@ function reducer(state, action) {
     case 'ADD_TRANSACTION':
       return { ...state, transactions: [...state.transactions, action.transaction] };
 
-    case 'UPDATE_TRANSACTION':
-      return {
-        ...state,
-        transactions: state.transactions.map((t) =>
-          t.id === action.transaction.id ? action.transaction : t,
-        ),
-      };
+    case 'UPDATE_TRANSACTION': {
+      const prev = state.transactions.find((t) => t.id === action.transaction.id);
+      const transactions = state.transactions.map((t) =>
+        t.id === action.transaction.id ? action.transaction : t,
+      );
+      if (!prev) return { ...state, transactions };
+      // Audit: only when the edit actually changed something meaningful.
+      const description = describeTransactionEdit(prev, action.transaction, state.categories);
+      if (!description) return { ...state, transactions };
+      return withAuditEntries({ ...state, transactions }, [
+        makeAuditEntry(AUDIT_ACTIONS.EDIT, description),
+      ]);
+    }
 
-    case 'DELETE_TRANSACTION':
-      return { ...state, transactions: state.transactions.filter((t) => t.id !== action.id) };
+    case 'DELETE_TRANSACTION': {
+      const prev = state.transactions.find((t) => t.id === action.id);
+      const transactions = state.transactions.filter((t) => t.id !== action.id);
+      if (!prev) return { ...state, transactions };
+      const description = `Deleted transaction: ${describeTransactionContent(prev, state.categories)}`;
+      return withAuditEntries({ ...state, transactions }, [
+        makeAuditEntry(AUDIT_ACTIONS.DELETE, description),
+      ]);
+    }
 
     case 'ADD_FRIEND':
       return {
@@ -53,8 +74,8 @@ function reducer(state, action) {
     case 'DELETE_FRIEND':
       return { ...state, friends: state.friends.filter((f) => f.id !== action.id) };
 
-    case 'UPDATE_SETTINGS':
-      return {
+    case 'UPDATE_SETTINGS': {
+      const next = {
         ...state,
         settings: {
           ...state.settings,
@@ -65,6 +86,17 @@ function reducer(state, action) {
           },
         },
       };
+      // Audit every starting balance that actually changed (budget edits don't log).
+      const entries = [];
+      for (const [id, value] of Object.entries(action.patch.startingBalances || {})) {
+        const from = round2(Number(state.settings.startingBalances?.[id]) || 0);
+        const to = round2(Number(value) || 0);
+        if (from !== to) {
+          entries.push(makeAuditEntry(AUDIT_ACTIONS.BALANCE, describeBalanceChange(id, from, to)));
+        }
+      }
+      return entries.length ? withAuditEntries(next, entries) : next;
+    }
 
     case 'ADD_CATEGORY':
       return {

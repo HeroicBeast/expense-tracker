@@ -53,6 +53,8 @@ export function createInitialState() {
     categories: DEFAULT_CATEGORIES.map((c) => ({ ...c })),
     friends: [],
     transactions: [],
+    // Chronological system audit log (transaction edits/deletes, balance changes).
+    auditLog: [],
   };
 }
 
