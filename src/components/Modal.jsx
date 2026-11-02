@@ -23,7 +23,7 @@ export default function Modal({ open, onClose, title, children, footer }) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
       <div className="absolute inset-0 bg-black/75 backdrop-blur-[2px]" onClick={onClose} aria-hidden="true" />
       <div className="relative flex max-h-[94dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-zinc-800 bg-zinc-900 shadow-2xl sm:max-w-lg sm:rounded-2xl">
         <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
