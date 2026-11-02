@@ -342,6 +342,18 @@ describe('analytics: overheads excluded from bar chart', () => {
     expect(a.over).toBe(0);
     expect(a.remaining).toBe(9000);
   });
+
+  it('daily array length matches the active month — never hardcoded to 30', () => {
+    const s = baseState();
+    expect(analyticsFor(s, '2026-12', { now: D(2026, 12, 15) }).daily).toHaveLength(31);
+    expect(analyticsFor(s, '2026-11', { now: D(2026, 11, 15) }).daily).toHaveLength(30);
+    expect(analyticsFor(s, '2026-02', { now: D(2026, 2, 10) }).daily).toHaveLength(28); // not a leap year
+    expect(analyticsFor(s, '2028-02', { now: D(2028, 2, 10) }).daily).toHaveLength(29); // leap year
+    // Last day of the month is present and the day after is not:
+    const dec = analyticsFor(s, '2026-12', { now: D(2026, 12, 31) }).daily;
+    expect(dec[dec.length - 1].day).toBe(31);
+    expect(dec.find((d) => d.day === 32)).toBeUndefined();
+  });
 });
 
 describe('split computation (equal, manual, itemized)', () => {
