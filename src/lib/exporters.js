@@ -63,6 +63,16 @@ export function parseBackup(text) {
       startingBalance: round2(Number(f.startingBalance) || 0),
     })),
     transactions: data.transactions.map((t) => ({ ...t, id: String(t.id), ts: Number(t.ts) })),
+    // Older backups predate the audit log — normalise to an array either way.
+    auditLog: (Array.isArray(data.auditLog) ? data.auditLog : [])
+      .filter((e) => e && typeof e === 'object' && e.description)
+      .map((e) => ({
+        id: String(e.id || `aud_${e.ts}_${Math.random().toString(36).slice(2, 8)}`),
+        ts: Number(e.ts) || 0,
+        time: String(e.time || ''),
+        action: String(e.action || 'edit'),
+        description: String(e.description),
+      })),
   };
 }
 

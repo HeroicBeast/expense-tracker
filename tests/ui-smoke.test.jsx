@@ -327,3 +327,109 @@ describe('friend flows', () => {
     expect(screen.getByText(/bal \+₹450/)).toBeInTheDocument();
   });
 });
+
+describe('audit log & starting balance guard', () => {
+  const WARNING =
+    'Are you sure you want to change your starting balance? This will immediately recalculate your current live balances.';
+
+  it('confirms before applying a starting-balance change and records it in the audit log', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    try {
+      await renderApp();
+      fireEvent.click(screen.getByText('Settings'));
+      await screen.findByText('Starting Balances');
+
+      const upiInput = screen.getAllByDisplayValue('0')[0]; // three balance fields, UPI first
+
+      // Blurring without touching the value must NOT prompt.
+      fireEvent.blur(upiInput);
+      expect(confirmSpy).not.toHaveBeenCalled();
+
+      // Change 0 → 5000: the exact warning must be shown, and only on confirm does it save.
+      fireEvent.change(upiInput, { target: { value: '5000' } });
+      fireEvent.blur(upiInput);
+      expect(confirmSpy).toHaveBeenCalledTimes(1);
+      expect(confirmSpy).toHaveBeenCalledWith(WARNING);
+      expect(upiInput).toHaveValue('5000');
+
+      // The change is visible in the View Audit Log modal with an Indian timestamp.
+      fireEvent.click(await screen.findByRole('button', { name: 'View Audit Log' }));
+      const dialog = await screen.findByRole('dialog');
+      expect(
+        within(dialog).getByText('Changed UPI starting balance from ₹0 to ₹5,000'),
+      ).toBeInTheDocument();
+      expect(within(dialog).getAllByText(/\d{2} \w{3} \d{4}, \d{1,2}:\d{2}/).length).toBeGreaterThan(0);
+    } finally {
+      confirmSpy.mockRestore();
+    }
+  });
+
+  it('reverts the field and logs nothing when the user declines the confirmation', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    try {
+      await renderApp();
+      fireEvent.click(screen.getByText('Settings'));
+      await screen.findByText('Starting Balances');
+
+      const upiInput = screen.getAllByDisplayValue('0')[0];
+      fireEvent.change(upiInput, { target: { value: '5000' } });
+      fireEvent.blur(upiInput);
+      expect(confirmSpy).toHaveBeenCalledWith(WARNING);
+      expect(upiInput).toHaveValue('0'); // reverted to the stored value
+
+      fireEvent.click(await screen.findByRole('button', { name: 'View Audit Log' }));
+      const dialog = await screen.findByRole('dialog');
+      expect(within(dialog).getByText(/No changes recorded yet/)).toBeInTheDocument();
+    } finally {
+      confirmSpy.mockRestore();
+    }
+  });
+
+  it('records transaction edits and deletions in the audit log, newest first', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    try {
+      await renderApp();
+
+      // Log a ₹500 Groceries expense.
+      fireEvent.click(screen.getByLabelText('Add transaction'));
+      let dialog = await screen.findByRole('dialog');
+      fireEvent.change(within(dialog).getByPlaceholderText('0'), { target: { value: '500' } });
+      fireEvent.click(within(dialog).getByText('Groceries'));
+      fireEvent.click(within(dialog).getByText('Save Expense'));
+      await waitFor(() => expect(heroSpend()).toBe('₹500'));
+
+      // Tap the row → edit the amount 500 → 450.
+      fireEvent.click(screen.getByText('Groceries'));
+      dialog = await screen.findByRole('dialog');
+      expect(within(dialog).getByText('Edit Transaction')).toBeInTheDocument();
+      const amountInput = within(dialog).getByPlaceholderText('0');
+      expect(amountInput).toHaveValue('500');
+      fireEvent.change(amountInput, { target: { value: '450' } });
+      fireEvent.click(within(dialog).getByText('Save Changes'));
+      await waitFor(() => expect(heroSpend()).toBe('₹450'));
+
+      // Delete it (confirm mocked) — both actions must be in the log.
+      fireEvent.click(screen.getByText('Groceries'));
+      dialog = await screen.findByRole('dialog');
+      fireEvent.click(within(dialog).getByText('Delete Transaction'));
+      await waitFor(() => expect(heroSpend()).toBe('₹0'));
+
+      fireEvent.click(screen.getByText('Settings'));
+      fireEvent.click(await screen.findByRole('button', { name: 'View Audit Log' }));
+      const auditDialog = await screen.findByRole('dialog');
+
+      const editDesc = within(auditDialog).getByText(
+        'Edited transaction: Changed amount from ₹500 to ₹450',
+      );
+      const deleteDesc = within(auditDialog).getByText('Deleted transaction: ₹450 for Groceries');
+      expect(editDesc).toBeInTheDocument();
+      expect(deleteDesc).toBeInTheDocument();
+
+      // Newest first: the delete entry sits above the edit entry.
+      const preceding = Node.DOCUMENT_POSITION_PRECEDING;
+      expect(editDesc.compareDocumentPosition(deleteDesc) & preceding).toBeTruthy();
+    } finally {
+      confirmSpy.mockRestore();
+    }
+  });
+});

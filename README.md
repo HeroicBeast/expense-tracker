@@ -28,11 +28,15 @@ device. No accounts, no servers, no tracking.
 - **Analytics** — month selector, monthly summary, category horizontal bar
   chart (fixed overheads strictly excluded), daily spend trend with a
   cumulative budget-pace line, and a fixed/variable/remaining breakdown.
-- **Settings** — monthly budget, starting balances, category add / rename /
-  reorder / "exclude from bar chart" toggle, 1-tap **JSON export/import**, and
-  a **Markdown financial report generator**: pick a date range and get a
-  client-side `.md` report (executive summary, category breakdown, outstanding
-  friend balances, itemized transactions) — zero document libraries.
+- **Settings** — monthly budget, starting balances (saved only after an
+  explicit confirmation, since they recalculate live balances), category add /
+  rename / reorder / "exclude from bar chart" toggle, 1-tap **JSON
+  export/import**, a **View Audit Log** modal (every transaction edit, delete
+  and starting-balance change with an Indian-format timestamp and a
+  before → after trail, newest first), and a **Markdown financial report
+  generator**: pick a date range and get a client-side `.md` report
+  (executive summary, category breakdown, outstanding friend balances,
+  itemized transactions) — zero document libraries.
 - **PWA** — `manifest.json` (standalone, portrait, `#09090B`), generated
   192/512 icons + maskable, and a service worker that caches the app shell for
   instant, zero-connectivity launches on Android Chrome ("Add to Home Screen").

@@ -8,13 +8,26 @@ import {
   ChevronDown,
   Plus,
   Database,
+  History,
 } from 'lucide-react';
 import CategoryIcon from '../components/CategoryIcon.jsx';
 import { useApp } from '../store/AppContext.jsx';
 import { ACCOUNTS, MISC_CATEGORY_ID } from '../lib/defaults.js';
 import { parseAmount, round2 } from '../lib/money.js';
+import { formatDateTime } from '../lib/selectors.js';
 import { exportJSON, parseBackup } from '../lib/exporters.js';
 import ReportModal from '../components/ReportModal.jsx';
+import Modal from '../components/Modal.jsx';
+
+/** Shown before any starting-balance save is allowed to proceed. */
+const STARTING_BALANCE_WARNING =
+  'Are you sure you want to change your starting balance? This will immediately recalculate your current live balances.';
+
+const AUDIT_BADGES = {
+  edit: { label: 'Edit', cls: 'border-sky-500/30 bg-sky-500/10 text-sky-400' },
+  delete: { label: 'Delete', cls: 'border-rose-500/30 bg-rose-500/10 text-rose-400' },
+  balance: { label: 'Balance', cls: 'border-amber-500/30 bg-amber-500/10 text-amber-400' },
+};
 
 function Toggle({ checked, onChange, label }) {
   return (
@@ -126,6 +139,7 @@ export default function Settings() {
   const [newCatOverhead, setNewCatOverhead] = useState(false);
   const [message, setMessage] = useState('');
   const [reportOpen, setReportOpen] = useState(false);
+  const [auditOpen, setAuditOpen] = useState(false);
   const fileRef = useRef(null);
   const messageTimer = useRef(null);
 
@@ -133,6 +147,16 @@ export default function Settings() {
     () => [...state.categories].sort((a, b) => a.order - b.order),
     [state.categories],
   );
+
+  // Newest first for the View Audit Log modal. Ties (same millisecond) fall
+  // back to insertion order so a just-appended entry always shows on top.
+  const auditEntries = useMemo(() => {
+    const log = Array.isArray(state.auditLog) ? state.auditLog : [];
+    return log
+      .map((entry, index) => ({ entry, index }))
+      .sort((a, b) => b.entry.ts - a.entry.ts || b.index - a.index)
+      .map(({ entry }) => entry);
+  }, [state.auditLog]);
 
   const flash = (msg) => {
     setMessage(msg);
@@ -151,12 +175,23 @@ export default function Settings() {
   };
 
   const commitBalance = (id, raw) => {
+    const current = round2(Number(state.settings.startingBalances[id]) || 0);
     const v = parseAmount(raw);
     if (!Number.isFinite(v)) {
-      setBalances((b) => ({ ...b, [id]: String(state.settings.startingBalances[id]) }));
+      setBalances((b) => ({ ...b, [id]: String(current) }));
       return;
     }
     const rounded = round2(v);
+    if (rounded === current) {
+      setBalances((b) => ({ ...b, [id]: String(rounded) })); // untouched → nothing to confirm
+      return;
+    }
+    // Safety net: a starting-balance change immediately recalculates every
+    // live balance — only proceed when the user explicitly confirms.
+    if (!window.confirm(STARTING_BALANCE_WARNING)) {
+      setBalances((b) => ({ ...b, [id]: String(current) })); // revert the edit
+      return;
+    }
     updateSettings({ startingBalances: { [id]: rounded } });
     setBalances((b) => ({ ...b, [id]: String(rounded) }));
   };
@@ -357,7 +392,55 @@ export default function Settings() {
         </div>
       </Section>
 
+      {/* System audit log */}
+      <Section title="Audit Log">
+        <p className="mb-2 text-[11px] text-zinc-600">
+          Every transaction edit, deletion and starting-balance change is recorded on this device — newest first.
+        </p>
+        <button
+          type="button"
+          onClick={() => setAuditOpen(true)}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-800/50 py-3 text-sm font-semibold text-zinc-200 transition active:scale-[0.99]"
+        >
+          <History className="h-4 w-4" />
+          View Audit Log
+        </button>
+      </Section>
+
       <ReportModal open={reportOpen} onClose={() => setReportOpen(false)} />
+
+      <Modal open={auditOpen} onClose={() => setAuditOpen(false)} title="Audit Log">
+        {auditEntries.length === 0 ? (
+          <div className="py-8 text-center">
+            <p className="text-sm font-medium text-zinc-400">No changes recorded yet</p>
+            <p className="mx-auto mt-1.5 max-w-[22rem] text-xs leading-relaxed text-zinc-600">
+              Transaction edits, deletions and starting-balance changes will appear here with a full before → after
+              trail.
+            </p>
+          </div>
+        ) : (
+          <ul className="space-y-2">
+            {auditEntries.map((e) => {
+              const badge = AUDIT_BADGES[e.action] || AUDIT_BADGES.edit;
+              return (
+                <li key={e.id} className="rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span
+                      className={`rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${badge.cls}`}
+                    >
+                      {badge.label}
+                    </span>
+                    <span className="text-[11px] tabular-nums text-zinc-500">
+                      {e.time || formatDateTime(e.ts)}
+                    </span>
+                  </div>
+                  <p className="mt-1.5 text-xs leading-relaxed text-zinc-300">{e.description}</p>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Modal>
 
       <div className="h-6" />
     </div>
