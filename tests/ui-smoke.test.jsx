@@ -8,12 +8,15 @@ import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-li
 import App from '../src/App.jsx';
 
 beforeEach(() => {
+  // jsdom keeps the URL across tests — always start from the Home route.
+  window.location.hash = '#/';
   localStorage.clear();
 });
 
 afterEach(() => {
   cleanup();
   localStorage.clear();
+  window.location.hash = '#/';
 });
 
 /** Text of the hero "Today's Spend" number (the only ₹-only <p> on Home). */
@@ -88,6 +91,36 @@ describe('add expense flow', () => {
     // UPI 0 → −500 (pill), UPI Lite 0 → +₹500 (pill + neutral transfer row).
     expect(screen.getByText('−₹500')).toBeInTheDocument();
     expect(screen.getAllByText('₹500').length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('analytics & settings screens', () => {
+  it('renders Analytics with the summary, category chart and budget breakdown', async () => {
+    await renderApp();
+
+    fireEvent.click(screen.getByText('Analytics'));
+    await screen.findByText('Total Monthly Spend');
+    expect(screen.getByText(/Category Spend/)).toBeInTheDocument();
+    expect(screen.getByText('Daily Spend Trend & Budget Pace')).toBeInTheDocument();
+    expect(screen.getByText('Budget Breakdown')).toBeInTheDocument();
+    // Shown both in the summary card and the breakdown legend.
+    expect(screen.getAllByText('Fixed Overhead').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('Variable Spend').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('renders Settings with budget, balances, categories and backup actions', async () => {
+    await renderApp();
+
+    fireEvent.click(screen.getByText('Settings'));
+    await screen.findByText('Monthly Budget');
+    expect(screen.getByText('Starting Balances')).toBeInTheDocument();
+    expect(screen.getByText('Categories')).toBeInTheDocument();
+    expect(screen.getByText('Export JSON Backup')).toBeInTheDocument();
+    expect(screen.getByText('Import JSON Backup')).toBeInTheDocument();
+    expect(screen.getByText('Export CSV')).toBeInTheDocument();
+    // All 10 pre-loaded categories are editable here.
+    expect(screen.getByDisplayValue('Food')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Househelp')).toBeInTheDocument();
   });
 });
 
