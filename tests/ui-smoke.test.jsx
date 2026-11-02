@@ -434,9 +434,9 @@ describe('audit log & starting balance guard', () => {
   });
 });
 
-describe('swipe right to duplicate', () => {
-  /** Drag a row `dx` px to the right and release it. */
-  const swipeRight = (row, dx) => {
+describe('swipe left to duplicate', () => {
+  /** Drag a row `dx` px and release it. */
+  const swipeLeft = (row, dx) => {
     fireEvent.touchStart(row, { touches: [{ clientX: 0, clientY: 20 }] });
     fireEvent.touchMove(row, { touches: [{ clientX: dx, clientY: 22 }] });
     fireEvent.touchEnd(row, { changedTouches: [{ clientX: dx, clientY: 22 }] });
@@ -461,7 +461,7 @@ describe('swipe right to duplicate', () => {
 
       // Swipe well past the threshold (jsdom viewport 1024px → threshold 307.2px).
       const row = screen.getByText('Groceries').closest('button');
-      swipeRight(row, 400);
+      swipeLeft(row, -400);
       expect(vibrate).toHaveBeenCalledWith(50); // light haptic exactly once
 
       // Duplicate lands: same amount + category, note gets "(Copy)", hero doubles.
@@ -496,11 +496,11 @@ describe('swipe right to duplicate', () => {
 
     // Mid-drag: the row visibly follows the finger…
     fireEvent.touchStart(row, { touches: [{ clientX: 0, clientY: 20 }] });
-    fireEvent.touchMove(row, { touches: [{ clientX: 40, clientY: 21 }] });
-    expect(content.style.transform).toBe('translateX(40px)');
+    fireEvent.touchMove(row, { touches: [{ clientX: -40, clientY: 21 }] });
+    expect(content.style.transform).toBe('translateX(-40px)');
 
     // …and on release it snaps back to 0 with no duplication.
-    fireEvent.touchEnd(row, { changedTouches: [{ clientX: 40, clientY: 21 }] });
+    fireEvent.touchEnd(row, { changedTouches: [{ clientX: -40, clientY: 21 }] });
     expect(content.style.transform).toBe('translateX(0px)');
     expect(screen.getAllByText('Food')).toHaveLength(1);
     expect(heroSpend()).toBe('₹250');
