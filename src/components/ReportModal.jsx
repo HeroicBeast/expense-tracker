@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { FileText, CalendarRange } from 'lucide-react';
 import Modal from './Modal.jsx';
 import { useApp } from '../store/AppContext.jsx';
-import { dateKey } from '../lib/selectors.js';
+import { dateKey, formatDateKey } from '../lib/selectors.js';
 import { transactionsInRange, buildFinancialReport } from '../lib/report.js';
 import { downloadFile } from '../lib/exporters.js';
 
@@ -49,8 +49,10 @@ export default function ReportModal({ open, onClose }) {
       return;
     }
     const markdown = buildFinancialReport(state, startDate, endDate);
+    // Filename in Indian day-first order: 01-11-2026
+    const fileDate = (key) => key.split('-').reverse().join('-');
     downloadFile(
-      `financial-report_${startDate}_to_${endDate}.md`,
+      `financial-report_${fileDate(startDate)}_to_${fileDate(endDate)}.md`,
       markdown,
       'text/markdown;charset=utf-8',
     );
@@ -120,6 +122,12 @@ export default function ReportModal({ open, onClose }) {
           />
         </div>
       </div>
+
+      {startDate && endDate ? (
+        <p className="mt-3 text-center text-xs font-medium text-zinc-400">
+          {formatDateKey(startDate)} <span className="text-zinc-600">→</span> {formatDateKey(endDate)}
+        </p>
+      ) : null}
 
       {error ? (
         <p

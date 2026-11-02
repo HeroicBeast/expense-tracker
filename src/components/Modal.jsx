@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { X } from 'lucide-react';
 
 /**
- * Bottom-sheet style modal (centered card on larger screens).
+ * Bottom-sheet style modal (centred card on larger screens).
  * Used for Add/Edit, Settle Up, Forgive and Friend dialogs.
  */
 export default function Modal({ open, onClose, title, children, footer }) {

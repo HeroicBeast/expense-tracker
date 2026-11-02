@@ -70,7 +70,7 @@ describe('buildFinancialReport (Markdown blueprint)', () => {
 
   it('follows the exact section structure and period line', () => {
     expect(md.startsWith('# Financial Overview Report\n')).toBe(true);
-    expect(md).toContain('**Period:** 2026-11-01 to 2026-11-30');
+    expect(md).toContain('**Period:** 01 Nov 2026 to 30 Nov 2026');
     expect(md).toContain('## Executive Summary');
     expect(md).toContain('## Category Breakdown');
     expect(md).toContain('## Outstanding Friend Balances');
@@ -106,11 +106,11 @@ describe('buildFinancialReport (Markdown blueprint)', () => {
     const lines = md.split('\n');
     const idx = (frag) => lines.findIndex((l) => l.includes(frag));
     const order = [
-      idx('**2026-11-01**: Rent - ₹8,000 (Paid via UPI)'),
-      idx('**2026-11-03**: Food - ₹500 (Paid via UPI Lite)'),
-      idx('**2026-11-04**: Transfer UPI → UPI Lite'),
-      idx('**2026-11-05**: Food - ₹300 (Paid via UPI)'),
-      idx('**2026-11-07**: Drink - ₹200 (Paid via Friend: Ravi)'),
+      idx('**01 Nov 2026**: Rent - ₹8,000 (Paid via UPI)'),
+      idx('**03 Nov 2026**: Food - ₹500 (Paid via UPI Lite)'),
+      idx('**04 Nov 2026**: Transfer UPI → UPI Lite'),
+      idx('**05 Nov 2026**: Food - ₹300 (Paid via UPI)'),
+      idx('**07 Nov 2026**: Drink - ₹200 (Paid via Friend: Ravi)'),
     ];
     expect(order.every((i) => i > 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
@@ -118,8 +118,9 @@ describe('buildFinancialReport (Markdown blueprint)', () => {
     // Optional note rendered under its bullet:
     expect(md).toContain('  *Note: Nov rent*');
     expect(md).toContain('  *Note: rooftop bar*');
-    // The out-of-range October trip never appears:
+    // The out-of-range October trip never appears (in any date format):
     expect(md).not.toContain('oct trip');
+    expect(md).not.toContain('15 Oct 2026');
     expect(md).not.toContain('2026-10-15');
   });
 

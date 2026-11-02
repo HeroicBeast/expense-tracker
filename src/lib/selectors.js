@@ -39,7 +39,11 @@ export function parseMonthKey(key) {
 
 export function monthLabel(key, style = 'long') {
   const { year, month } = parseMonthKey(key);
-  return new Date(year, month - 1, 1).toLocaleString('en-US', { month: style, year: style === 'long' ? 'numeric' : undefined });
+  // Indian English: "November 2026" / "Nov" (month names, never MM/DD numbers).
+  return new Date(year, month - 1, 1).toLocaleString('en-IN', {
+    month: style,
+    year: style === 'long' ? 'numeric' : undefined,
+  });
 }
 
 export function shiftMonthKey(key, delta) {
@@ -53,10 +57,26 @@ export function daysInMonth(key) {
   return new Date(year, month, 0).getDate();
 }
 
+/** "02 Nov 2026" — the standard Indian day-first date format (DD MMM YYYY). */
+export function formatDateIndian(ts) {
+  return new Date(ts).toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+/** Same Indian format from a "YYYY-MM-DD" date key (report period lines etc). */
+export function formatDateKey(key) {
+  const [y, m, d] = String(key).split('-').map(Number);
+  if (!y || !m || !d) return String(key);
+  return formatDateIndian(new Date(y, m - 1, d));
+}
+
+/** "02 Nov 2026, 4:35 pm" — transaction row timestamps, day-first. */
 export function formatDateTime(ts) {
-  const d = new Date(ts);
-  const day = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-  const time = d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
+  const day = formatDateIndian(ts);
+  const time = new Date(ts).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
   return `${day}, ${time}`;
 }
 

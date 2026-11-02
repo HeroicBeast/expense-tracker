@@ -14,15 +14,19 @@ export function parseAmount(raw) {
   return Number.isFinite(n) ? n : NaN;
 }
 
+// Indian Rupee with Indian digit grouping (₹1,50,000 — lakh/crore style).
+// Paisa are shown only when the value actually has them.
 const inrFormatter = new Intl.NumberFormat('en-IN', {
+  style: 'currency',
+  currency: 'INR',
   minimumFractionDigits: 0,
   maximumFractionDigits: 2,
 });
 
-/** ₹1,23,456 — keeps a leading − for negative values (no decimals unless present). */
+/** ₹1,50,000 — keeps a leading − for negative values (no decimals unless present). */
 export function formatINR(n) {
   const v = round2(n);
-  const body = `₹${inrFormatter.format(Math.abs(v))}`;
+  const body = inrFormatter.format(Math.abs(v));
   return v < 0 ? `−${body}` : body;
 }
 

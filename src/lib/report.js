@@ -4,6 +4,8 @@
 
 import {
   dateKey,
+  formatDateIndian,
+  formatDateKey,
   personalSpendOf,
   rangeSpend,
   sortOldestFirst,
@@ -22,7 +24,7 @@ export function transactionsInRange(state, startKey, endKey) {
 
 /** One itemized line for the report, shaped per the report blueprint. */
 function itemizedLine(tx, categoryById, friendById) {
-  const day = dateKey(tx.ts);
+  const day = formatDateIndian(tx.ts);
   const note = tx.note ? `\n  *Note: ${tx.note}*` : '';
 
   if (tx.type === 'expense') {
@@ -81,7 +83,7 @@ export function buildFinancialReport(state, startKey, endKey) {
   const out = [];
   out.push('# Financial Overview Report');
   out.push('');
-  out.push(`**Period:** ${startKey} to ${endKey}`);
+  out.push(`**Period:** ${formatDateKey(startKey)} to ${formatDateKey(endKey)}`);
   out.push('');
 
   out.push('## Executive Summary');
