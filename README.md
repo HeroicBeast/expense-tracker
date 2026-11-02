@@ -24,7 +24,7 @@ device. No accounts, no servers, no tracking.
 - **Home** — balance pills, hero *Today's Spend*, monthly budget progress,
   last month's variance reference badge, and the complete master transaction
   list (never truncated on month rollover; tap any row to edit or delete with
-  full retroactive recalculation, or **swipe right to duplicate** it —
+  full retroactive recalculation, or **swipe left to duplicate** it —
   rubber-banded gesture, haptic lock-in, the copy lands on today's date and
   is written to the audit log).
 - **Analytics** — month selector, monthly summary, category horizontal bar
