@@ -32,8 +32,8 @@ function Shell() {
   if (!hydrated) return <Splash />;
 
   return (
-    <div className="min-h-dvh bg-zinc-950 text-zinc-100 antialiased">
-      <main className="pb-24">
+    <div className="min-h-[100dvh] bg-zinc-950 text-zinc-100 antialiased">
+      <main className="min-h-[100dvh] pb-24">
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/friends" element={<Friends />} />
