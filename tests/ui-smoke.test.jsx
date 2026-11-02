@@ -4,7 +4,7 @@
 // friend nets) updates correctly.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, cleanup, within, act } from '@testing-library/react';
 import App from '../src/App.jsx';
 
 beforeEach(() => {
@@ -502,6 +502,99 @@ describe('swipe left to duplicate', () => {
     // …and on release it snaps back to 0 with no duplication.
     fireEvent.touchEnd(row, { changedTouches: [{ clientX: -40, clientY: 21 }] });
     expect(content.style.transform).toBe('translateX(0px)');
+    expect(screen.getAllByText('Food')).toHaveLength(1);
+    expect(heroSpend()).toBe('₹250');
+  });
+});
+
+describe('swipe right to delete with undo', () => {
+  const addExpense = async (amount, category) => {
+    fireEvent.click(screen.getByLabelText('Add transaction'));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByPlaceholderText('0'), { target: { value: String(amount) } });
+    if (category) fireEvent.click(within(dialog).getByText(category));
+    fireEvent.click(within(dialog).getByText('Save Expense'));
+    await waitFor(() => expect(heroSpend()).toBe(`₹${amount}`));
+  };
+
+  const swipeRight = (row, dx) => {
+    fireEvent.touchStart(row, { touches: [{ clientX: 0, clientY: 20 }] });
+    fireEvent.touchMove(row, { touches: [{ clientX: dx, clientY: 21 }] });
+    fireEvent.touchEnd(row, { changedTouches: [{ clientX: dx, clientY: 21 }] });
+  };
+
+  it('optimistically hides the row with a Deleted. + UNDO toast; Undo restores without logging', async () => {
+    const vibrate = vi.fn();
+    Object.defineProperty(navigator, 'vibrate', { value: vibrate, configurable: true, writable: true });
+    try {
+      await renderApp();
+      await addExpense(500, 'Groceries');
+
+      const row = screen.getByText('Groceries').closest('button');
+      swipeRight(row, 400); // jsdom viewport 1024px → threshold 307.2px
+      expect(vibrate).toHaveBeenCalledWith(50);
+
+      // Optimistic update: row gone from the list, totals recalculated, toast up.
+      expect(screen.queryByText('Groceries')).toBeNull();
+      expect(heroSpend()).toBe('₹0');
+      expect(screen.getByText('Deleted.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'UNDO' })).toBeInTheDocument();
+
+      // Undo inside the window: everything restores instantly, nothing logged.
+      fireEvent.click(screen.getByRole('button', { name: 'UNDO' }));
+      expect(screen.queryByText('Deleted.')).toBeNull();
+      expect(screen.getByText('Groceries')).toBeInTheDocument();
+      expect(heroSpend()).toBe('₹500');
+
+      fireEvent.click(screen.getByText('Settings'));
+      fireEvent.click(await screen.findByRole('button', { name: 'View Audit Log' }));
+      const auditDialog = await screen.findByRole('dialog');
+      expect(within(auditDialog).getByText(/No changes recorded yet/)).toBeInTheDocument();
+    } finally {
+      delete navigator.vibrate;
+    }
+  });
+
+  it('commits the hard delete after the 4-second timeout and writes the audit entry', async () => {
+    await renderApp();
+    await addExpense(500, 'Groceries');
+
+    const row = screen.getByText('Groceries').closest('button');
+    swipeRight(row, 400);
+    expect(screen.getByText('Deleted.')).toBeInTheDocument();
+
+    // Wait out the 4s undo window inside act() so the timer's dispatch is flushed.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 4100));
+    });
+
+    // Toast gone, deletion permanent, audit log records it.
+    expect(screen.queryByText('Deleted.')).toBeNull();
+    expect(screen.queryByText('Groceries')).toBeNull();
+    expect(heroSpend()).toBe('₹0');
+
+    fireEvent.click(screen.getByText('Settings'));
+    fireEvent.click(await screen.findByRole('button', { name: 'View Audit Log' }));
+    const auditDialog = await screen.findByRole('dialog');
+    expect(
+      within(auditDialog).getByText('Deleted transaction: ₹500 for Groceries'),
+    ).toBeInTheDocument();
+  });
+
+  it('snaps back without deleting when the right swipe stays below the threshold', async () => {
+    await renderApp();
+    await addExpense(250, null);
+
+    const row = screen.getByText('Food').closest('button');
+    const content = row.querySelector('span[class*="bg-zinc-900"]');
+
+    fireEvent.touchStart(row, { touches: [{ clientX: 0, clientY: 20 }] });
+    fireEvent.touchMove(row, { touches: [{ clientX: 40, clientY: 21 }] });
+    expect(content.style.transform).toBe('translateX(40px)');
+
+    fireEvent.touchEnd(row, { changedTouches: [{ clientX: 40, clientY: 21 }] });
+    expect(content.style.transform).toBe('translateX(0px)');
+    expect(screen.queryByText('Deleted.')).toBeNull();
     expect(screen.getAllByText('Food')).toHaveLength(1);
     expect(heroSpend()).toBe('₹250');
   });

@@ -44,25 +44,42 @@ function VarianceBadge({ variance }) {
  * progress + last month's variance reference, and the full master transaction
  * list (never truncated on month change).
  */
-export default function Home() {
+export default function Home({ pendingDelete, onRequestDelete }) {
   const { state, duplicateTransaction } = useApp();
   const [addOpen, setAddOpen] = useState(false);
   const [addMode, setAddMode] = useState('expense');
   const [editTx, setEditTx] = useState(null);
 
-  const balances = useMemo(() => computeAccountBalances(state), [state]);
-  const today = useMemo(() => todaySpend(state), [state]);
-  const monthKey = currentMonthKey();
-  const spend = useMemo(() => monthSpend(state, monthKey), [state, monthKey]);
-  const variance = useMemo(() => lastMonthVariance(state), [state]);
-  const transactions = useMemo(() => sortNewestFirst(state.transactions), [state]);
+  // Optimistic soft delete: while an undo window is open, Home derives
+  // everything from a view of the store without the pending transaction —
+  // undo simply drops the filter, so the row and every total snap back.
+  const visibleState = useMemo(
+    () =>
+      pendingDelete
+        ? { ...state, transactions: state.transactions.filter((t) => t.id !== pendingDelete.tx.id) }
+        : state,
+    [state, pendingDelete],
+  );
 
-  const budget = round2(state.settings.budget || 0);
+  const balances = useMemo(() => computeAccountBalances(visibleState), [visibleState]);
+  const today = useMemo(() => todaySpend(visibleState), [visibleState]);
+  const monthKey = currentMonthKey();
+  const spend = useMemo(() => monthSpend(visibleState, monthKey), [visibleState, monthKey]);
+  const variance = useMemo(() => lastMonthVariance(visibleState), [visibleState]);
+  const transactions = useMemo(() => sortNewestFirst(visibleState.transactions), [visibleState]);
+
+  const budget = round2(visibleState.settings.budget || 0);
   const remaining = round2(budget - spend.total);
   const pct = budget > 0 ? Math.min((spend.total / budget) * 100, 100) : 0;
   const overBudget = budget > 0 && spend.total > budget;
-  const categoryById = useMemo(() => new Map(state.categories.map((c) => [c.id, c])), [state.categories]);
-  const friendById = useMemo(() => new Map(state.friends.map((f) => [f.id, f])), [state.friends]);
+  const categoryById = useMemo(
+    () => new Map(visibleState.categories.map((c) => [c.id, c])),
+    [visibleState.categories],
+  );
+  const friendById = useMemo(
+    () => new Map(visibleState.friends.map((f) => [f.id, f])),
+    [visibleState.friends],
+  );
 
   const openAdd = (mode) => {
     setAddMode(mode);
@@ -155,6 +172,7 @@ export default function Home() {
                 friend={tx.friendId ? friendById.get(tx.friendId) || null : null}
                 onOpen={() => setEditTx(tx)}
                 onDuplicate={() => duplicateTransaction(tx.id)}
+                onDeleteRequest={() => onRequestDelete(tx)}
               />
             ))}
           </div>
