@@ -1,0 +1,329 @@
+// @vitest-environment jsdom
+// End-to-end UI smoke tests: render the real <App/>, drive the real modals,
+// and assert that derived state (today's spend, account pills, list rows,
+// friend nets) updates correctly.
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import '@testing-library/jest-dom/vitest';
+import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/react';
+import App from '../src/App.jsx';
+
+beforeEach(() => {
+  // jsdom keeps the URL across tests — always start from the Home route.
+  window.location.hash = '#/';
+  localStorage.clear();
+});
+
+afterEach(() => {
+  cleanup();
+  localStorage.clear();
+  window.location.hash = '#/';
+});
+
+/** Text of the hero "Today's Spend" number (the only ₹-only <p> on Home). */
+const heroSpend = () =>
+  [...document.querySelectorAll('p')]
+    .map((p) => p.textContent)
+    .find((t) => /^₹[\d,]+(\.\d+)?$/.test(t)) ?? null;
+
+async function renderApp() {
+  const utils = render(<App />);
+  await waitFor(() => expect(heroSpend()).toBe('₹0'), { timeout: 4000 });
+  return utils;
+}
+
+describe('app shell', () => {
+  it('renders Home with balance pills, hero metric and the 4-tab bottom nav + FAB', async () => {
+    await renderApp();
+
+    expect(screen.getByText('UPI')).toBeInTheDocument();
+    expect(screen.getByText('UPI Lite')).toBeInTheDocument();
+    expect(screen.getByText('Cash')).toBeInTheDocument();
+    expect(screen.getByText('Transfer / Top-Up')).toBeInTheDocument();
+
+    expect(heroSpend()).toBe('₹0');
+    expect(screen.getByText(/All Transactions/i)).toBeInTheDocument();
+    expect(screen.getByText('No transactions yet')).toBeInTheDocument();
+
+    expect(screen.getByLabelText('Add transaction')).toBeInTheDocument();
+    expect(screen.getByText('Home')).toBeInTheDocument();
+    expect(screen.getByText('Friends')).toBeInTheDocument();
+    expect(screen.getByText('Analytics')).toBeInTheDocument();
+    expect(screen.getByText('Settings')).toBeInTheDocument();
+  });
+});
+
+describe('add expense flow', () => {
+  it('saves an expense and immediately updates Today’s Spend, the list and the UPI pill', async () => {
+    await renderApp();
+
+    fireEvent.click(screen.getByLabelText('Add transaction'));
+    const dialog = await screen.findByRole('dialog');
+
+    fireEvent.change(within(dialog).getByPlaceholderText('0'), { target: { value: '250' } });
+    fireEvent.click(within(dialog).getByText('Groceries'));
+    fireEvent.click(within(dialog).getByText('Save Expense'));
+
+    // Today's spend hero flips from ₹0 to ₹250.
+    await waitFor(() => expect(heroSpend()).toBe('₹250'));
+
+    // Master list now contains the row; modal closed.
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByText('Groceries')).toBeInTheDocument();
+
+    // Cash outflow shows on the UPI pill AND the row (−₹250 each).
+    await waitFor(() => expect(screen.getAllByText('−₹250').length).toBeGreaterThanOrEqual(1));
+  });
+
+  it('records a 1-tap internal transfer with zero budget impact', async () => {
+    await renderApp();
+
+    fireEvent.click(screen.getByText('Transfer / Top-Up'));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('UPI → UPI Lite (Top-Up)')).toBeInTheDocument();
+
+    fireEvent.change(within(dialog).getByPlaceholderText('0'), { target: { value: '500' } });
+    fireEvent.click(within(dialog).getByText('Record Transfer'));
+
+    // Transfer row appears; Today's Spend stays ₹0 (no budget impact).
+    await screen.findByText('Top-Up');
+    expect(heroSpend()).toBe('₹0');
+
+    // UPI 0 → −500 (pill), UPI Lite 0 → +₹500 (pill + neutral transfer row).
+    expect(screen.getByText('−₹500')).toBeInTheDocument();
+    expect(screen.getAllByText('₹500').length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('analytics & settings screens', () => {
+  it('renders Analytics with the summary, category chart and budget breakdown', async () => {
+    await renderApp();
+
+    fireEvent.click(screen.getByText('Analytics'));
+    await screen.findByText('Total Monthly Spend');
+    expect(screen.getByText(/Category Spend/)).toBeInTheDocument();
+    expect(screen.getByText('Daily Spend Trend & Budget Pace')).toBeInTheDocument();
+    expect(screen.getByText('Budget Breakdown')).toBeInTheDocument();
+    // Shown both in the summary card and the breakdown legend.
+    expect(screen.getAllByText('Fixed Overhead').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('Variable Spend').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('renders Settings with budget, balances, categories and backup actions', async () => {
+    await renderApp();
+
+    fireEvent.click(screen.getByText('Settings'));
+    await screen.findByText('Monthly Budget');
+    expect(screen.getByText('Starting Balances')).toBeInTheDocument();
+    expect(screen.getByText('Categories')).toBeInTheDocument();
+    expect(screen.getByText('Export JSON Backup')).toBeInTheDocument();
+    expect(screen.getByText('Import JSON Backup')).toBeInTheDocument();
+    expect(screen.getByText('Generate Financial Report')).toBeInTheDocument();
+    // All 10 pre-loaded categories are editable here.
+    expect(screen.getByDisplayValue('Food')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Househelp')).toBeInTheDocument();
+  });
+});
+
+describe('financial report flow', () => {
+  it('opens the date picker and shows the red inline error when the period has no data', async () => {
+    await renderApp();
+
+    fireEvent.click(screen.getByText('Settings'));
+    fireEvent.click(await screen.findByText('Generate Financial Report'));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByLabelText('Start Date')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('End Date')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Generate' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+
+    // Fresh ledger → zero transactions in range → mandated error, no file.
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Generate' }));
+    await within(dialog).findByText('No data found for this selected period.');
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('No data found for this selected period.');
+    // Modal stays open so the user can adjust the dates.
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('generates and downloads a .md report when the period contains data', async () => {
+    // jsdom has no Blob URL support — stub the download plumbing.
+    const createObjectURL = vi.fn(() => 'blob:financial-report');
+    const revokeObjectURL = vi.fn();
+    window.URL.createObjectURL = createObjectURL;
+    window.URL.revokeObjectURL = revokeObjectURL;
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+    try {
+      await renderApp();
+
+      // Create one in-range expense so the period is not empty.
+      fireEvent.click(screen.getByLabelText('Add transaction'));
+      const txDialog = await screen.findByRole('dialog');
+      fireEvent.change(within(txDialog).getByPlaceholderText('0'), { target: { value: '420' } });
+      fireEvent.click(within(txDialog).getByText('Save Expense'));
+      await waitFor(() => expect(heroSpend()).toBe('₹420'));
+
+      fireEvent.click(screen.getByText('Settings'));
+      fireEvent.click(await screen.findByText('Generate Financial Report'));
+      const dialog = await screen.findByRole('dialog');
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Generate' }));
+
+      await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
+      const blob = createObjectURL.mock.calls[0][0];
+      expect(blob).toBeInstanceOf(Blob);
+      expect(blob.size).toBeGreaterThan(0);
+      expect(blob.type).toContain('text/markdown');
+      // Report downloads and the modal closes.
+      expect(clickSpy).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole('dialog')).toBeNull();
+    } finally {
+      clickSpy.mockRestore();
+      delete window.URL.createObjectURL;
+      delete window.URL.revokeObjectURL;
+    }
+  });
+});
+
+describe('smart notes & quick settle', () => {
+  it('suggests previously used notes via datalist, filtered by selected category', async () => {
+    await renderApp();
+
+    // Log a Food expense carrying a distinctive note.
+    fireEvent.click(screen.getByLabelText('Add transaction'));
+    let dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByPlaceholderText('0'), { target: { value: '250' } });
+    fireEvent.click(within(dialog).getByText('Food'));
+    fireEvent.change(within(dialog).getByPlaceholderText('Add a note...'), {
+      target: { value: 'Paneer butter masala' },
+    });
+    fireEvent.click(within(dialog).getByText('Save Expense'));
+    await waitFor(() => expect(heroSpend()).toBe('₹250'));
+
+    // Re-open: Food is the default category → the note is offered.
+    fireEvent.click(screen.getByLabelText('Add transaction'));
+    dialog = await screen.findByRole('dialog');
+    const noteInput = within(dialog).getByPlaceholderText('Add a note...');
+    const readOptions = () => {
+      const list = document.getElementById(noteInput.getAttribute('list'));
+      return [...list.querySelectorAll('option')].map((o) => o.value);
+    };
+    expect(readOptions()).toContain('Paneer butter masala');
+
+    // Switch to Travel → Food notes must vanish from the suggestions.
+    fireEvent.click(within(dialog).getByText('Travel'));
+    expect(readOptions()).not.toContain('Paneer butter masala');
+
+    fireEvent.click(within(dialog).getByLabelText('Close'));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('1-tap Settle Full fills the exact outstanding balance', async () => {
+    await renderApp();
+
+    // Ravi + equal split of ₹900 → owes you ₹450.
+    fireEvent.click(screen.getByText('Friends'));
+    fireEvent.click(screen.getAllByText('Add Friend')[0]);
+    const addDialog = await screen.findByRole('dialog');
+    fireEvent.change(within(addDialog).getByPlaceholderText("Friend's name"), {
+      target: { value: 'Ravi' },
+    });
+    fireEvent.click(within(addDialog).getByRole('button', { name: 'Add Friend' }));
+    await waitFor(() => expect(screen.getByText('Ravi')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByLabelText('Add transaction'));
+    const txDialog = await screen.findByRole('dialog');
+    fireEvent.change(within(txDialog).getByPlaceholderText('0'), { target: { value: '900' } });
+    fireEvent.click(within(txDialog).getByText('Split this bill'));
+    fireEvent.click(await within(txDialog).findByText('Ravi'));
+    fireEvent.click(within(txDialog).getByText('Save Expense'));
+    await screen.findAllByText('+₹450');
+
+    // Settle Up → Settle Full types the odd balance for you.
+    fireEvent.click(screen.getByText('Settle Up'));
+    const settleDialog = await screen.findByRole('dialog');
+    const amountInput = within(settleDialog).getByPlaceholderText('0');
+    expect(amountInput.value).toBe('');
+    fireEvent.click(within(settleDialog).getByText('Settle Full'));
+    expect(amountInput.value).toBe('450');
+    expect(within(settleDialog).queryByRole('alert')).toBeNull();
+  });
+});
+
+describe('initial balance when adding a friend', () => {
+  it('migrates a pre-app debt into the ledger without touching accounts or budget', async () => {
+    await renderApp();
+
+    // --- Friend A: they owe me ₹250 (positive) ---
+    fireEvent.click(screen.getByText('Friends'));
+    fireEvent.click(screen.getAllByText('Add Friend')[0]);
+    let addDialog = await screen.findByRole('dialog');
+    expect(within(addDialog).getByLabelText(/Initial Balance/)).toBeInTheDocument();
+    fireEvent.change(within(addDialog).getByPlaceholderText("Friend's name"), {
+      target: { value: 'Suresh' },
+    });
+    fireEvent.change(within(addDialog).getByLabelText(/Initial Balance/), {
+      target: { value: '250' },
+    });
+    fireEvent.click(within(addDialog).getByRole('button', { name: 'Add Friend' }));
+
+    // Ledger shows +₹250 (summary card + row pill) with zero transactions.
+    const positive = await screen.findAllByText('+₹250');
+    expect(positive.length).toBeGreaterThanOrEqual(2);
+
+    // --- Friend B: I owe them ₹100 (negative) ---
+    fireEvent.click(screen.getAllByText('Add Friend')[0]);
+    addDialog = await screen.findByRole('dialog');
+    fireEvent.change(within(addDialog).getByPlaceholderText("Friend's name"), {
+      target: { value: 'Vikram' },
+    });
+    fireEvent.change(within(addDialog).getByLabelText(/Initial Balance/), {
+      target: { value: '100' },
+    });
+    fireEvent.click(within(addDialog).getByText('I owe them'));
+    fireEvent.click(within(addDialog).getByRole('button', { name: 'Add Friend' }));
+    await screen.findByText('−₹100');
+
+    // CRITICAL rule: Home must be completely untouched — no spend, no cash flow.
+    fireEvent.click(screen.getByText('Home'));
+    await waitFor(() => expect(heroSpend()).toBe('₹0'));
+    expect(screen.getAllByText('₹0').length).toBeGreaterThanOrEqual(3); // hero + 3 account pills
+  });
+});
+
+describe('friend flows', () => {
+  it('adds a friend, splits a bill you paid, and shows the running ledger', async () => {
+    await renderApp();
+
+    // --- Add a friend from the Friends tab ---
+    fireEvent.click(screen.getByText('Friends'));
+    fireEvent.click(screen.getAllByText('Add Friend')[0]);
+    const addDialog = await screen.findByRole('dialog');
+    fireEvent.change(within(addDialog).getByPlaceholderText("Friend's name"), {
+      target: { value: 'Ravi' },
+    });
+    fireEvent.click(within(addDialog).getByRole('button', { name: 'Add Friend' }));
+    await waitFor(() => expect(screen.getByText('Ravi')).toBeInTheDocument());
+    expect(screen.getByText('Net')).toBeInTheDocument();
+
+    // --- Log a split expense you paid: ₹900, equal, you + Ravi ---
+    fireEvent.click(screen.getByLabelText('Add transaction'));
+    const txDialog = await screen.findByRole('dialog');
+    fireEvent.change(within(txDialog).getByPlaceholderText('0'), { target: { value: '900' } });
+    fireEvent.click(within(txDialog).getByText('Split this bill'));
+    fireEvent.click(await within(txDialog).findByText('Ravi')); // choose participant
+    fireEvent.click(within(txDialog).getByText('Save Expense'));
+
+    // Friend balance: +₹450 — shown both in the summary card and the row pill.
+    const nets = await screen.findAllByText('+₹450');
+    expect(nets.length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('owes you')).toBeInTheDocument();
+
+    // --- Open the friend's chronological ledger ---
+    fireEvent.click(screen.getByText('Ravi'));
+    await screen.findByText('Split bill · Food');
+    expect(screen.getByText(/bal \+₹450/)).toBeInTheDocument();
+  });
+});
