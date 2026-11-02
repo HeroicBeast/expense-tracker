@@ -267,7 +267,7 @@ export default function Friends() {
 
       {/* ---------------- Friend detail overlay ---------------- */}
       {detailFriend ? (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-zinc-950">
+        <div className="fixed inset-0 z-[60] overflow-y-auto bg-zinc-950">
           <div className="mx-auto w-full max-w-lg px-4 pb-24 pt-4">
             <div className="flex items-center gap-2">
               <button
