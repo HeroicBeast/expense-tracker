@@ -20,7 +20,7 @@ import {
   transactionsInvolving,
   formatDateTime,
 } from '../lib/selectors.js';
-import { formatINR, formatSigned, round2 } from '../lib/money.js';
+import { formatINR, formatSigned, parseAmount, round2 } from '../lib/money.js';
 import { ACCOUNT_LABELS } from '../lib/defaults.js';
 
 function balancePillClass(net) {
@@ -63,6 +63,14 @@ function describeEntry(tx, friendName, categoryById, effect) {
       isCategory: false,
     };
   }
+  if (tx.type === 'opening') {
+    return {
+      title: 'Initial Balance',
+      sub: 'Pre-app debt migrated into the ledger',
+      icon: null,
+      isCategory: false,
+    };
+  }
   if (tx.type === 'forgive') {
     return {
       title: 'Forgiven debt',
@@ -79,6 +87,8 @@ export default function Friends() {
   const { state, addFriend, renameFriend, deleteFriend } = useApp();
   const [addOpen, setAddOpen] = useState(false);
   const [newName, setNewName] = useState('');
+  const [initialAmount, setInitialAmount] = useState('');
+  const [initialDirection, setInitialDirection] = useState('owes_me'); // 'owes_me' | 'i_owe'
   const [detailId, setDetailId] = useState(null);
   const [settleFor, setSettleFor] = useState(null);
   const [forgiveFor, setForgiveFor] = useState(null);
@@ -94,11 +104,24 @@ export default function Friends() {
     [state, detailId],
   );
 
+  const resetAddFriendForm = () => {
+    setNewName('');
+    setInitialAmount('');
+    setInitialDirection('owes_me');
+  };
+
+  const parsedInitial = parseAmount(initialAmount);
+  const initialMagnitude =
+    initialAmount.trim() !== '' && Number.isFinite(parsedInitial) ? Math.abs(round2(parsedInitial)) : 0;
+  const signedInitial = initialDirection === 'i_owe' ? -initialMagnitude : initialMagnitude;
+
   const handleAddFriend = () => {
     const name = newName.trim();
     if (!name) return;
-    addFriend(name);
-    setNewName('');
+    // Signed opening balance seeds only the friend ledger — never accounts,
+    // Today's Spend or the monthly budget (it is not a transaction).
+    addFriend(name, signedInitial);
+    resetAddFriendForm();
     setAddOpen(false);
   };
 
@@ -363,13 +386,15 @@ export default function Friends() {
                     <button
                       key={tx.id}
                       type="button"
-                      onClick={() => setEditTx(tx)}
+                      onClick={() => {
+                        if (tx.type !== 'opening') setEditTx(tx);
+                      }}
                       className="flex w-full items-start gap-3 border-b border-zinc-800/60 px-4 py-3 text-left last:border-b-0 transition active:bg-zinc-800/50"
                     >
                       <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-zinc-800 text-zinc-400">
                         {info.isCategory ? (
                           <CategoryIcon name={info.icon} className="h-4 w-4" />
-                        ) : info.title.startsWith('Settlement') ? (
+                        ) : info.title.startsWith('Settlement') || info.title === 'Initial Balance' ? (
                           <HandCoins className="h-4 w-4" />
                         ) : (
                           <Undo2 className="h-4 w-4" />
@@ -408,7 +433,7 @@ export default function Friends() {
         open={addOpen}
         onClose={() => {
           setAddOpen(false);
-          setNewName('');
+          resetAddFriendForm();
         }}
         title="Add Friend"
         footer={
@@ -432,6 +457,63 @@ export default function Friends() {
           maxLength={40}
           className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none focus:border-emerald-600"
         />
+
+        <label
+          htmlFor="friend-initial-balance"
+          className="mb-1 mt-4 block text-[11px] font-medium uppercase tracking-wider text-zinc-500"
+        >
+          Initial Balance (₹) — optional
+        </label>
+        <div className="flex items-center rounded-lg border border-zinc-800 bg-zinc-950 px-3 focus-within:border-emerald-600">
+          <span className="text-sm font-semibold text-zinc-500">₹</span>
+          <input
+            id="friend-initial-balance"
+            inputMode="decimal"
+            placeholder="0"
+            value={initialAmount}
+            onChange={(e) => setInitialAmount(e.target.value)}
+            className="w-full bg-transparent px-2 py-2.5 text-sm font-semibold tabular-nums text-zinc-100 placeholder:text-zinc-600 outline-none"
+          />
+        </div>
+
+        <div className="mt-2 grid grid-cols-2 gap-1.5">
+          <button
+            type="button"
+            onClick={() => setInitialDirection('owes_me')}
+            className={`rounded-lg border px-2 py-2.5 text-xs font-semibold transition ${
+              initialDirection === 'owes_me'
+                ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400'
+                : 'border-zinc-800 bg-zinc-800/40 text-zinc-400'
+            }`}
+          >
+            They owe me
+          </button>
+          <button
+            type="button"
+            onClick={() => setInitialDirection('i_owe')}
+            className={`rounded-lg border px-2 py-2.5 text-xs font-semibold transition ${
+              initialDirection === 'i_owe'
+                ? 'border-rose-500 bg-rose-500/10 text-rose-400'
+                : 'border-zinc-800 bg-zinc-800/40 text-zinc-400'
+            }`}
+          >
+            I owe them
+          </button>
+        </div>
+
+        <p className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-[11px] leading-snug text-zinc-500">
+          {initialMagnitude > 0 ? (
+            <>
+              Ledger opens at{' '}
+              <span className={`font-semibold ${signedInitial > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {formatSigned(signedInitial)}
+              </span>
+              .{' '}
+            </>
+          ) : null}
+          Migrates a pre-app debt into the peer ledger only — it never touches your account balances, Today's
+          Spend or the monthly budget.
+        </p>
       </Modal>
 
       <SettleModal

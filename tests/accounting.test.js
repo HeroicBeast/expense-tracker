@@ -25,7 +25,7 @@ function baseState() {
 }
 
 function withFriends(state, names) {
-  state.friends = names.map((name, i) => ({ id: `f_${name}`, name, createdAt: 1 }));
+  state.friends = names.map((name) => ({ id: `f_${name}`, name, createdAt: 1, startingBalance: 0 }));
   return state;
 }
 
@@ -179,6 +179,43 @@ describe('friend ledger: settlements, netting and forgiveness', () => {
     const spend = monthSpend(s, '2026-11');
     expect(spend.total).toBe(900); // 880 + 20 forgiven
     expect(spend.byCategory[MISC_CATEGORY_ID]).toBe(20);
+  });
+
+  it('initial balance migrates pre-app debt into the ledger ONLY', () => {
+    const s = withFriends(baseState(), ['A']);
+    s.friends[0].startingBalance = 400;
+
+    // No transactions exist — yet the ledger knows the debt.
+    expect(computeFriendBalances(s).f_A).toBe(400);
+    // CRITICAL: accounts, budget and Today's Spend are completely untouched.
+    expect(computeAccountBalances(s)).toEqual({ upi: 10000, upiLite: 2000, cash: 500 });
+    expect(monthSpend(s, '2026-11').total).toBe(0);
+    expect(todaySpend(s, D(2026, 11, 5))).toBe(0);
+    expect(friendSummary(s).owedToYou).toBe(400);
+
+    // Negative direction: "I owe them".
+    const s2 = withFriends(baseState(), ['B']);
+    s2.friends[0].startingBalance = -150;
+    expect(computeFriendBalances(s2).f_B).toBe(-150);
+    expect(friendSummary(s2).youOwe).toBe(150);
+    expect(monthSpend(s2, '2026-11').total).toBe(0);
+
+    // New activity stacks on top of the opening balance.
+    s.transactions = [
+      splitYouPaid({ split: { mode: 'manual', shares: [{ who: 'you', amount: 600 }, { who: 'f_A', amount: 300 }] } }),
+    ];
+    expect(computeFriendBalances(s).f_A).toBe(700);
+    // Budget counts only the split's personal share (₹600 yours) — never the
+    // opening balance, which is not a transaction at all.
+    expect(monthSpend(s, '2026-11').total).toBe(600);
+
+    // Ledger opens with a synthetic Initial Balance row and runs correctly.
+    const ledger = friendLedger(s, 'f_A');
+    expect(ledger[0].tx.type).toBe('opening');
+    expect(ledger[0].effect).toBe(400);
+    expect(ledger[0].running).toBe(400);
+    expect(ledger[1].tx.id).toBe('tx_split');
+    expect(ledger[1].running).toBe(700);
   });
 
   it('friend ledger is chronological with a correct running balance', () => {
@@ -408,6 +445,7 @@ describe('split computation (equal, manual, itemized)', () => {
 describe('backup export / import', () => {
   it('round-trips the full state through a JSON backup', () => {
     const s = withFriends(baseState(), ['A', 'B']);
+    s.friends[0].startingBalance = 150; // migrated pre-app debt
     s.transactions = [
       splitYouPaid(),
       { id: 'b2', ts: D(2026, 11, 5), type: 'settlement', direction: 'paid', amount: 100, accountId: 'cash', friendId: 'f_A', note: 'x' },

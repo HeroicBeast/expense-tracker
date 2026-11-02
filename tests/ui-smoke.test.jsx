@@ -252,6 +252,47 @@ describe('smart notes & quick settle', () => {
   });
 });
 
+describe('initial balance when adding a friend', () => {
+  it('migrates a pre-app debt into the ledger without touching accounts or budget', async () => {
+    await renderApp();
+
+    // --- Friend A: they owe me ₹250 (positive) ---
+    fireEvent.click(screen.getByText('Friends'));
+    fireEvent.click(screen.getAllByText('Add Friend')[0]);
+    let addDialog = await screen.findByRole('dialog');
+    expect(within(addDialog).getByLabelText(/Initial Balance/)).toBeInTheDocument();
+    fireEvent.change(within(addDialog).getByPlaceholderText("Friend's name"), {
+      target: { value: 'Suresh' },
+    });
+    fireEvent.change(within(addDialog).getByLabelText(/Initial Balance/), {
+      target: { value: '250' },
+    });
+    fireEvent.click(within(addDialog).getByRole('button', { name: 'Add Friend' }));
+
+    // Ledger shows +₹250 (summary card + row pill) with zero transactions.
+    const positive = await screen.findAllByText('+₹250');
+    expect(positive.length).toBeGreaterThanOrEqual(2);
+
+    // --- Friend B: I owe them ₹100 (negative) ---
+    fireEvent.click(screen.getAllByText('Add Friend')[0]);
+    addDialog = await screen.findByRole('dialog');
+    fireEvent.change(within(addDialog).getByPlaceholderText("Friend's name"), {
+      target: { value: 'Vikram' },
+    });
+    fireEvent.change(within(addDialog).getByLabelText(/Initial Balance/), {
+      target: { value: '100' },
+    });
+    fireEvent.click(within(addDialog).getByText('I owe them'));
+    fireEvent.click(within(addDialog).getByRole('button', { name: 'Add Friend' }));
+    await screen.findByText('−₹100');
+
+    // CRITICAL rule: Home must be completely untouched — no spend, no cash flow.
+    fireEvent.click(screen.getByText('Home'));
+    await waitFor(() => expect(heroSpend()).toBe('₹0'));
+    expect(screen.getAllByText('₹0').length).toBeGreaterThanOrEqual(3); // hero + 3 account pills
+  });
+});
+
 describe('friend flows', () => {
   it('adds a friend, splits a bill you paid, and shows the running ledger', async () => {
     await renderApp();

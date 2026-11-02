@@ -32,7 +32,15 @@ function reducer(state, action) {
         ...state,
         friends: [
           ...state.friends,
-          { id: newId('f'), name: action.name.trim(), createdAt: Date.now() },
+          {
+            id: newId('f'),
+            name: action.name.trim(),
+            createdAt: Date.now(),
+            // Signed opening balance: + = they owe you, − = you owe them.
+            // Ledger-only seed — never part of the transaction list, so it
+            // cannot reach account balances or personal spend.
+            startingBalance: round2(Number(action.startingBalance) || 0),
+          },
         ],
       };
 
@@ -155,7 +163,8 @@ export function AppProvider({ children }) {
       updateTransaction: (tx) => dispatch({ type: 'UPDATE_TRANSACTION', transaction: tx }),
       deleteTransaction: (id) => dispatch({ type: 'DELETE_TRANSACTION', id }),
 
-      addFriend: (name) => dispatch({ type: 'ADD_FRIEND', name }),
+      addFriend: (name, startingBalance = 0) =>
+        dispatch({ type: 'ADD_FRIEND', name, startingBalance }),
       renameFriend: (id, name) => dispatch({ type: 'RENAME_FRIEND', id, name }),
       deleteFriend: (id) => dispatch({ type: 'DELETE_FRIEND', id }),
 

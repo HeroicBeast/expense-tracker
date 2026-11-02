@@ -60,6 +60,7 @@ export function parseBackup(text) {
       id: String(f.id),
       name: String(f.name ?? 'Friend'),
       createdAt: Number(f.createdAt) || Date.now(),
+      startingBalance: round2(Number(f.startingBalance) || 0),
     })),
     transactions: data.transactions.map((t) => ({ ...t, id: String(t.id), ts: Number(t.ts) })),
   };

@@ -16,8 +16,11 @@ device. No accounts, no servers, no tracking.
   accounts; friend-paid bills book your share with zero account movement.
 - **Splitwise-style offline ledger** — equal / manual / itemized+tax splits,
   automatic mutual netting, partial & lump-sum settlements in either direction
-  through any account, and a *Forgive / Round Off* action that books the
-  forgiven amount as a `Miscellaneous` expense so the books always reconcile.
+  through any account, a *Forgive / Round Off* action that books the
+  forgiven amount as a `Miscellaneous` expense so the books always reconcile,
+  and an optional **Initial Balance** when adding a friend to migrate debts
+  from before the app existed (ledger-only — it never touches account
+  balances, Today's Spend or the monthly budget).
 - **Home** — balance pills, hero *Today's Spend*, monthly budget progress,
   last month's variance reference badge, and the complete master transaction
   list (never truncated on month rollover; tap any row to edit or delete with

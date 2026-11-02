@@ -149,7 +149,8 @@ export function computeAccountBalances(state) {
  */
 export function computeFriendBalances(state) {
   const nets = {};
-  for (const f of state.friends) nets[f.id] = 0;
+  // Seed each friend with their migrated opening balance (+ they owe you / − you owe them).
+  for (const f of state.friends) nets[f.id] = round2(Number(f.startingBalance) || 0);
   for (const tx of state.transactions) {
     // Effects only apply to friends that still exist in the ledger, so orphan
     // ids from an old backup can never skew the summary totals.
@@ -386,13 +387,35 @@ export function friendEffectOf(tx, friendId) {
  * balance after every entry — every split bill, settlement and forgiveness.
  */
 export function friendLedger(state, friendId) {
-  const relevant = sortOldestFirst(state.transactions).filter((tx) => friendEffectOf(tx, friendId) !== 0);
-  let running = 0;
-  return relevant.map((tx) => {
+  const friend = state.friends.find((f) => f.id === friendId);
+  const opening = round2(Number(friend?.startingBalance) || 0);
+  const entries = [];
+
+  // Synthetic read-only "Initial Balance" row so migrated pre-app debts are
+  // visible in the ledger and the running balance starts from the right place.
+  if (opening !== 0) {
+    entries.push({
+      tx: {
+        id: `opening_${friendId}`,
+        type: 'opening',
+        ts: Number(friend?.createdAt) || 0,
+        amount: Math.abs(opening),
+        friendId,
+        note: '',
+      },
+      effect: opening,
+      running: opening,
+    });
+  }
+
+  let running = opening;
+  for (const tx of sortOldestFirst(state.transactions)) {
     const effect = friendEffectOf(tx, friendId);
+    if (effect === 0) continue;
     running = round2(running + effect);
-    return { tx, effect, running };
-  });
+    entries.push({ tx, effect, running });
+  }
+  return entries;
 }
 
 /** Transaction rows that involve a given friend (for delete guards etc). */
