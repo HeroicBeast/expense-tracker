@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { ChevronDown, Trash2, ArrowRightLeft, Wallet, Receipt } from 'lucide-react';
 import Modal from './Modal.jsx';
 import CategoryIcon from './CategoryIcon.jsx';
@@ -176,6 +176,32 @@ export default function AddTransactionModal({ open, transaction, initialMode = '
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.splitOpen, form.splitFriends.join(','), form.splitMode, form.amount]);
+
+  /**
+   * Smart note auto-complete: previously used notes for the active context —
+   * filtered by the selected category in Expense mode (so Food only ever
+   * suggests Food notes), by transaction type for Transfer/Income.
+   * Newest-first, deduplicated case-insensitively, capped to stay tidy.
+   */
+  const noteListId = useId();
+  const noteSuggestions = useMemo(() => {
+    const wantedType = form.mode === 'expense' ? 'expense' : form.mode;
+    const seen = new Set();
+    const out = [];
+    for (let i = state.transactions.length - 1; i >= 0; i -= 1) {
+      const tx = state.transactions[i];
+      if (tx.type !== wantedType) continue;
+      if (form.mode === 'expense' && tx.categoryId !== form.categoryId) continue;
+      const note = String(tx.note || '').trim();
+      if (!note) continue;
+      const key = note.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(note);
+      if (out.length >= 15) break;
+    }
+    return out;
+  }, [state.transactions, form.mode, form.categoryId]);
 
   const toggleSplitFriend = (id) => {
     set({
@@ -694,10 +720,16 @@ export default function AddTransactionModal({ open, transaction, initialMode = '
         type="text"
         maxLength={120}
         placeholder="Add a note..."
+        list={noteListId}
         value={form.note}
         onChange={(e) => set({ note: e.target.value })}
         className={inputCls}
       />
+      <datalist id={noteListId}>
+        {noteSuggestions.map((note) => (
+          <option key={note} value={note} />
+        ))}
+      </datalist>
 
       {transaction ? (
         <button

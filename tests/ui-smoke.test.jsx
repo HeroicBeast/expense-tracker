@@ -187,6 +187,71 @@ describe('financial report flow', () => {
   });
 });
 
+describe('smart notes & quick settle', () => {
+  it('suggests previously used notes via datalist, filtered by selected category', async () => {
+    await renderApp();
+
+    // Log a Food expense carrying a distinctive note.
+    fireEvent.click(screen.getByLabelText('Add transaction'));
+    let dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByPlaceholderText('0'), { target: { value: '250' } });
+    fireEvent.click(within(dialog).getByText('Food'));
+    fireEvent.change(within(dialog).getByPlaceholderText('Add a note...'), {
+      target: { value: 'Paneer butter masala' },
+    });
+    fireEvent.click(within(dialog).getByText('Save Expense'));
+    await waitFor(() => expect(heroSpend()).toBe('₹250'));
+
+    // Re-open: Food is the default category → the note is offered.
+    fireEvent.click(screen.getByLabelText('Add transaction'));
+    dialog = await screen.findByRole('dialog');
+    const noteInput = within(dialog).getByPlaceholderText('Add a note...');
+    const readOptions = () => {
+      const list = document.getElementById(noteInput.getAttribute('list'));
+      return [...list.querySelectorAll('option')].map((o) => o.value);
+    };
+    expect(readOptions()).toContain('Paneer butter masala');
+
+    // Switch to Travel → Food notes must vanish from the suggestions.
+    fireEvent.click(within(dialog).getByText('Travel'));
+    expect(readOptions()).not.toContain('Paneer butter masala');
+
+    fireEvent.click(within(dialog).getByLabelText('Close'));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('1-tap Settle Full fills the exact outstanding balance', async () => {
+    await renderApp();
+
+    // Ravi + equal split of ₹900 → owes you ₹450.
+    fireEvent.click(screen.getByText('Friends'));
+    fireEvent.click(screen.getAllByText('Add Friend')[0]);
+    const addDialog = await screen.findByRole('dialog');
+    fireEvent.change(within(addDialog).getByPlaceholderText("Friend's name"), {
+      target: { value: 'Ravi' },
+    });
+    fireEvent.click(within(addDialog).getByRole('button', { name: 'Add Friend' }));
+    await waitFor(() => expect(screen.getByText('Ravi')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByLabelText('Add transaction'));
+    const txDialog = await screen.findByRole('dialog');
+    fireEvent.change(within(txDialog).getByPlaceholderText('0'), { target: { value: '900' } });
+    fireEvent.click(within(txDialog).getByText('Split this bill'));
+    fireEvent.click(await within(txDialog).findByText('Ravi'));
+    fireEvent.click(within(txDialog).getByText('Save Expense'));
+    await screen.findAllByText('+₹450');
+
+    // Settle Up → Settle Full types the odd balance for you.
+    fireEvent.click(screen.getByText('Settle Up'));
+    const settleDialog = await screen.findByRole('dialog');
+    const amountInput = within(settleDialog).getByPlaceholderText('0');
+    expect(amountInput.value).toBe('');
+    fireEvent.click(within(settleDialog).getByText('Settle Full'));
+    expect(amountInput.value).toBe('450');
+    expect(within(settleDialog).queryByRole('alert')).toBeNull();
+  });
+});
+
 describe('friend flows', () => {
   it('adds a friend, splits a bill you paid, and shows the running ledger', async () => {
     await renderApp();

@@ -4,6 +4,7 @@ import Modal from './Modal.jsx';
 import { useApp } from '../store/AppContext.jsx';
 import { ACCOUNTS, ACCOUNT_LABELS } from '../lib/defaults.js';
 import { parseAmount, round2, formatINR } from '../lib/money.js';
+import { computeFriendBalances } from '../lib/selectors.js';
 
 /**
  * Settle Up modal — supports partial payments and multi-bill lump sums in
@@ -14,7 +15,12 @@ import { parseAmount, round2, formatINR } from '../lib/money.js';
  */
 export default function SettleModal({ open, onClose, friendId, transaction }) {
   const { state, addTransaction, updateTransaction, deleteTransaction } = useApp();
-  const friend = state.friends.find((f) => f.id === (transaction?.friendId ?? friendId));
+  const targetFriendId = transaction?.friendId ?? friendId;
+  const friend = state.friends.find((f) => f.id === targetFriendId);
+
+  // Live outstanding balance: +₹X = friend owes you, −₹X = you owe friend.
+  const outstanding = round2(computeFriendBalances(state)[targetFriendId] ?? 0);
+  const fullAmount = round2(Math.abs(outstanding));
 
   const [direction, setDirection] = useState('received');
   const [amount, setAmount] = useState('');
@@ -38,6 +44,13 @@ export default function SettleModal({ open, onClose, friendId, transaction }) {
   const amountNum = parseAmount(amount);
   const valid = Number.isFinite(amountNum) && amountNum > 0;
 
+  // 1-tap: fill the exact outstanding balance (and align the direction).
+  const handleSettleFull = () => {
+    setAmount(String(fullAmount));
+    setDirection(outstanding > 0 ? 'received' : 'paid');
+    setError('');
+  };
+
   const handleSave = () => {
     if (!valid) {
       setError('Enter an amount greater than zero.');
@@ -48,7 +61,7 @@ export default function SettleModal({ open, onClose, friendId, transaction }) {
       direction,
       amount: round2(amountNum),
       accountId,
-      friendId: transaction?.friendId ?? friendId,
+      friendId: targetFriendId,
       note: '',
     };
     if (transaction) updateTransaction({ ...tx, id: transaction.id, ts: transaction.ts });
@@ -116,6 +129,16 @@ export default function SettleModal({ open, onClose, friendId, transaction }) {
           onChange={(e) => setAmount(e.target.value)}
           className="w-full bg-transparent py-3 text-2xl font-bold tabular-nums text-zinc-100 placeholder:text-zinc-700 outline-none"
         />
+        {fullAmount >= 0.01 ? (
+          <button
+            type="button"
+            onClick={handleSettleFull}
+            title={`Fill the full balance (${formatINR(fullAmount)})`}
+            className="ml-2 shrink-0 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-[10px] font-semibold tracking-wide text-zinc-300 transition hover:border-emerald-600 hover:text-emerald-400 active:scale-95"
+          >
+            Settle Full
+          </button>
+        ) : null}
       </div>
 
       <label className="mb-2 block text-[11px] font-medium uppercase tracking-wider text-zinc-500">
