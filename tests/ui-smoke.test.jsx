@@ -433,3 +433,76 @@ describe('audit log & starting balance guard', () => {
     }
   });
 });
+
+describe('swipe right to duplicate', () => {
+  /** Drag a row `dx` px to the right and release it. */
+  const swipeRight = (row, dx) => {
+    fireEvent.touchStart(row, { touches: [{ clientX: 0, clientY: 20 }] });
+    fireEvent.touchMove(row, { touches: [{ clientX: dx, clientY: 22 }] });
+    fireEvent.touchEnd(row, { changedTouches: [{ clientX: dx, clientY: 22 }] });
+  };
+
+  it('duplicates past the threshold with haptic feedback, a (Copy) note and an audit entry', async () => {
+    const vibrate = vi.fn();
+    Object.defineProperty(navigator, 'vibrate', { value: vibrate, configurable: true, writable: true });
+    try {
+      await renderApp();
+
+      // ₹500 Groceries with a note.
+      fireEvent.click(screen.getByLabelText('Add transaction'));
+      let dialog = await screen.findByRole('dialog');
+      fireEvent.change(within(dialog).getByPlaceholderText('0'), { target: { value: '500' } });
+      fireEvent.click(within(dialog).getByText('Groceries'));
+      fireEvent.change(within(dialog).getByPlaceholderText('Add a note...'), {
+        target: { value: 'Weekly groceries' },
+      });
+      fireEvent.click(within(dialog).getByText('Save Expense'));
+      await waitFor(() => expect(heroSpend()).toBe('₹500'));
+
+      // Swipe well past the threshold (jsdom viewport 1024px → threshold 307.2px).
+      const row = screen.getByText('Groceries').closest('button');
+      swipeRight(row, 400);
+      expect(vibrate).toHaveBeenCalledWith(50); // light haptic exactly once
+
+      // Duplicate lands: same amount + category, note gets "(Copy)", hero doubles.
+      await waitFor(() => expect(heroSpend()).toBe('₹1,000'));
+      expect(screen.getAllByText('Groceries')).toHaveLength(2);
+      expect(screen.getByText('Weekly groceries')).toBeInTheDocument();
+      expect(screen.getByText('Weekly groceries (Copy)')).toBeInTheDocument();
+
+      // Audit log carries the spec wording.
+      fireEvent.click(screen.getByText('Settings'));
+      fireEvent.click(await screen.findByRole('button', { name: 'View Audit Log' }));
+      const auditDialog = await screen.findByRole('dialog');
+      expect(
+        within(auditDialog).getByText('Duplicated transaction via swipe: Groceries - ₹500'),
+      ).toBeInTheDocument();
+    } finally {
+      delete navigator.vibrate;
+    }
+  });
+
+  it('snaps back without duplicating when the swipe stays below the threshold', async () => {
+    await renderApp();
+
+    fireEvent.click(screen.getByLabelText('Add transaction'));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByPlaceholderText('0'), { target: { value: '250' } });
+    fireEvent.click(within(dialog).getByText('Save Expense'));
+    await waitFor(() => expect(heroSpend()).toBe('₹250'));
+
+    const row = screen.getByText('Food').closest('button');
+    const content = row.querySelector('span[class*="bg-zinc-900"]');
+
+    // Mid-drag: the row visibly follows the finger…
+    fireEvent.touchStart(row, { touches: [{ clientX: 0, clientY: 20 }] });
+    fireEvent.touchMove(row, { touches: [{ clientX: 40, clientY: 21 }] });
+    expect(content.style.transform).toBe('translateX(40px)');
+
+    // …and on release it snaps back to 0 with no duplication.
+    fireEvent.touchEnd(row, { changedTouches: [{ clientX: 40, clientY: 21 }] });
+    expect(content.style.transform).toBe('translateX(0px)');
+    expect(screen.getAllByText('Food')).toHaveLength(1);
+    expect(heroSpend()).toBe('₹250');
+  });
+});
