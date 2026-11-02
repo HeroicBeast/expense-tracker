@@ -24,9 +24,10 @@ device. No accounts, no servers, no tracking.
 - **Home** — balance pills, hero *Today's Spend*, monthly budget progress,
   last month's variance reference badge, and the complete master transaction
   list (never truncated on month rollover; tap any row to edit or delete with
-  full retroactive recalculation, or **swipe left to duplicate** it —
-  rubber-banded gesture, haptic lock-in, the copy lands on today's date and
-  is written to the audit log).
+  full retroactive recalculation, **swipe left to duplicate** it (the copy
+  lands on today's date and is written to the audit log) or **swipe right to
+  delete** it with a minimalist 4-second *Deleted. / UNDO* toast — the
+  deletion is only committed (and logged) if the undo window expires).
 - **Analytics** — month selector, monthly summary, category horizontal bar
   chart (fixed overheads strictly excluded), daily spend trend with a
   cumulative budget-pace line, and a fixed/variable/remaining breakdown.
