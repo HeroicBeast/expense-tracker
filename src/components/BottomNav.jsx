@@ -20,11 +20,11 @@ export default function BottomNav({ onAdd }) {
     }`;
 
   return (
-    <nav
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur"
-      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
-      aria-label="Primary"
-    >
+<nav
+  className="fixed bottom-0 left-0 right-0 w-full z-50 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur"
+  style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+  aria-label="Primary"
+>
       <div className="relative mx-auto grid max-w-lg grid-cols-5">
         {TABS.map((tab, i) => (
           <Fragment key={tab.to}>
@@ -45,7 +45,6 @@ export default function BottomNav({ onAdd }) {
           <Plus className="h-7 w-7" strokeWidth={2.5} />
         </button>
       </div>
-      <div className="h-[3.25rem]" />
     </nav>
   );
 }
