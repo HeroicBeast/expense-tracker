@@ -45,7 +45,7 @@ function VarianceBadge({ variance }) {
  * list (never truncated on month change).
  */
 export default function Home() {
-  const { state } = useApp();
+  const { state, duplicateTransaction } = useApp();
   const [addOpen, setAddOpen] = useState(false);
   const [addMode, setAddMode] = useState('expense');
   const [editTx, setEditTx] = useState(null);
@@ -154,6 +154,7 @@ export default function Home() {
                 }
                 friend={tx.friendId ? friendById.get(tx.friendId) || null : null}
                 onOpen={() => setEditTx(tx)}
+                onDuplicate={() => duplicateTransaction(tx.id)}
               />
             ))}
           </div>

@@ -1,8 +1,9 @@
-import { ArrowRightLeft, Wallet, HandCoins, UserRound, Undo2 } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { ArrowRightLeft, Wallet, HandCoins, Undo2, Copy } from 'lucide-react';
 import CategoryIcon from './CategoryIcon.jsx';
 import { formatINR, round2 } from '../lib/money.js';
 import { formatDateTime } from '../lib/selectors.js';
-import { ACCOUNT_LABELS, MISC_CATEGORY_ID } from '../lib/defaults.js';
+import { ACCOUNT_LABELS } from '../lib/defaults.js';
 
 const Badge = ({ children }) => (
   <span className="inline-flex max-w-[9rem] items-center truncate rounded border border-zinc-700/70 bg-zinc-800/80 px-1.5 py-px text-[10px] font-medium text-zinc-400">
@@ -10,13 +11,21 @@ const Badge = ({ children }) => (
   </span>
 );
 
+/** Swipe trigger point: 30% of the viewport width, never below 80px. */
+function swipeThreshold() {
+  const w = typeof window !== 'undefined' ? window.innerWidth : 360;
+  return Math.max(80, w * 0.3);
+}
+
 /**
  * One row of the master transaction list. Every row is tappable to edit
  * (or delete) the underlying record — edits/deletes retroactively recalculate
  * account balances, friend nets and monthly totals because everything derives
- * from this list.
+ * from this list. Swiping the row to the right (Spotify/Messages style)
+ * reveals an emerald Duplicate action and, past the threshold, clones the
+ * transaction onto right now.
  */
-export default function TransactionRow({ tx, category, friend, onOpen }) {
+export default function TransactionRow({ tx, category, friend, onOpen, onDuplicate }) {
   let Icon = CategoryIcon;
   let iconName = category?.icon || 'Shapes';
   let title = category?.name || 'Expense';
@@ -89,34 +98,142 @@ export default function TransactionRow({ tx, category, friend, onOpen }) {
   const categoryLabel =
     tx.type === 'expense' || tx.type === 'forgive' ? (category?.name ?? '') : '';
 
+  // --- Swipe-right-to-duplicate gesture (vanilla touch events) -------------
+  const [offset, setOffset] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const gesture = useRef({ active: false, startX: 0, startY: 0, axis: null });
+  const offsetRef = useRef(0);
+  const crossedRef = useRef(false); // threshold already hit (one haptic per swipe)
+  const swipedRef = useRef(false); // swallow the click that follows a swipe
+
+  const applyOffset = (v) => {
+    offsetRef.current = v;
+    setOffset(v);
+  };
+
+  const handleTouchStart = (e) => {
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0];
+    gesture.current = { active: true, startX: t.clientX, startY: t.clientY, axis: null };
+    crossedRef.current = false;
+    swipedRef.current = false;
+    setDragging(true);
+    applyOffset(0);
+  };
+
+  const handleTouchMove = (e) => {
+    const g = gesture.current;
+    if (!g.active || e.touches.length !== 1) return;
+    const t = e.touches[0];
+    const dx = t.clientX - g.startX;
+    const dy = t.clientY - g.startY;
+
+    // Axis lock: yield to vertical scrolling unless clearly horizontal.
+    if (g.axis === null) {
+      if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+      if (Math.abs(dy) > Math.abs(dx)) {
+        g.active = false;
+        setDragging(false);
+        return;
+      }
+      g.axis = 'x';
+    }
+
+    const threshold = swipeThreshold();
+    const raw = Math.max(0, dx);
+    // 1:1 tracking up to the threshold, rubber-band resistance past it.
+    const next = Math.min(
+      raw > threshold ? threshold + (raw - threshold) * 0.25 : raw,
+      threshold + 70,
+    );
+    applyOffset(next);
+
+    // One light haptic the moment the action locks in.
+    if (!crossedRef.current && next >= threshold) {
+      crossedRef.current = true;
+      swipedRef.current = true;
+      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+        navigator.vibrate(50);
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    const fire = crossedRef.current && offsetRef.current >= swipeThreshold();
+    gesture.current.active = false;
+    gesture.current.axis = null;
+    setDragging(false);
+    applyOffset(0); // snap back with the CSS transition
+    if (fire) {
+      swipedRef.current = true; // make sure the trailing click never opens the editor
+      onDuplicate?.();
+    }
+  };
+
+  const handleClick = (e) => {
+    if (swipedRef.current) {
+      e.preventDefault();
+      e.stopPropagation();
+      swipedRef.current = false;
+      return;
+    }
+    onOpen?.();
+  };
+
+  // How much of the hidden Duplicate layer is revealed (0 → 1).
+  const reveal = Math.min(offset / swipeThreshold(), 1);
+
   return (
     <button
       type="button"
-      onClick={onOpen}
-      className="flex w-full items-start gap-3 border-b border-zinc-800/60 px-4 py-3 text-left transition active:bg-zinc-900/70"
+      onClick={handleClick}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
+      className="relative w-full touch-pan-y overflow-hidden border-b border-zinc-800/60 text-left transition active:bg-zinc-900/70"
     >
-      <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-zinc-800/80 text-zinc-300">
-        {Icon === CategoryIcon ? (
-          <CategoryIcon name={iconName} className="h-4.5 w-4.5" />
-        ) : (
-          <Icon className="h-4.5 w-4.5" />
-        )}
+      {/* Hidden action layer, revealed by swiping the row right */}
+      <span
+        aria-hidden="true"
+        className="absolute inset-0 flex items-center gap-2 pl-4 text-emerald-400"
+        style={{ opacity: reveal }}
+      >
+        <Copy className="h-5 w-5" />
+        <span className="text-xs font-bold uppercase tracking-wide">Duplicate</span>
       </span>
 
-      <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-1.5">
-          <span className="truncate text-sm font-medium text-zinc-100">{title}</span>
-          {badge ? <Badge>{badge}</Badge> : null}
+      {/* Row content — slides over the action layer while dragging */}
+      <span
+        className="flex w-full items-start gap-3 bg-zinc-900 px-4 py-3"
+        style={{
+          transform: `translateX(${offset}px)`,
+          transition: dragging ? 'none' : 'transform 300ms cubic-bezier(0.22, 1, 0.36, 1)',
+        }}
+      >
+        <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-zinc-800/80 text-zinc-300">
+          {Icon === CategoryIcon ? (
+            <CategoryIcon name={iconName} className="h-4.5 w-4.5" />
+          ) : (
+            <Icon className="h-4.5 w-4.5" />
+          )}
         </span>
-        <span className="mt-0.5 block truncate text-xs text-zinc-500">
-          {[categoryLabel && tx.type === 'forgive' ? categoryLabel : '', sub].filter(Boolean).join(' · ')}
-        </span>
-        <span className="mt-0.5 block text-[11px] tabular-nums text-zinc-600">{formatDateTime(tx.ts)}</span>
-      </span>
 
-      <span className="shrink-0 pt-0.5 text-right">
-        <span className={`block text-sm font-semibold tabular-nums ${mainClass}`}>{main}</span>
-        {subLine ? <span className="mt-0.5 block text-[11px] tabular-nums text-zinc-500">{subLine}</span> : null}
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-1.5">
+            <span className="truncate text-sm font-medium text-zinc-100">{title}</span>
+            {badge ? <Badge>{badge}</Badge> : null}
+          </span>
+          <span className="mt-0.5 block truncate text-xs text-zinc-500">
+            {[categoryLabel && tx.type === 'forgive' ? categoryLabel : '', sub].filter(Boolean).join(' · ')}
+          </span>
+          <span className="mt-0.5 block text-[11px] tabular-nums text-zinc-600">{formatDateTime(tx.ts)}</span>
+        </span>
+
+        <span className="shrink-0 pt-0.5 text-right">
+          <span className={`block text-sm font-semibold tabular-nums ${mainClass}`}>{main}</span>
+          {subLine ? <span className="mt-0.5 block text-[11px] tabular-nums text-zinc-500">{subLine}</span> : null}
+        </span>
       </span>
     </button>
   );

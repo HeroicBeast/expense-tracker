@@ -156,6 +156,65 @@ describe('audit helpers', () => {
   });
 });
 
+describe('duplicate (swipe) trigger', () => {
+  it('clones the transaction with a fresh id, "now" timestamp, "(Copy)" note and an audit entry', () => {
+    const s = stateWithExpense({ note: 'Weekly groceries' });
+    const before = s.transactions[0];
+    const startedAt = Date.now();
+    const next = reducer(s, { type: 'DUPLICATE_TRANSACTION', id: 'tx1' });
+
+    expect(next.transactions).toHaveLength(2);
+    const [orig, copy] = next.transactions;
+    expect(orig).toBe(before); // original untouched
+    expect(copy.id).not.toBe('tx1');
+    expect(copy.id).toMatch(/^tx_/);
+    expect(copy.amount).toBe(500);
+    expect(copy.categoryId).toBe('food');
+    expect(copy.accountId).toBe('upi');
+    expect(copy.paidBy).toBe('you');
+    expect(copy.ts).toBeGreaterThanOrEqual(startedAt); // dated right now
+    expect(copy.note).toBe('Weekly groceries (Copy)');
+
+    expect(next.auditLog).toHaveLength(1);
+    expect(next.auditLog[0].action).toBe('duplicate');
+    expect(next.auditLog[0].description).toBe(
+      'Duplicated transaction via swipe: Food - ₹500',
+    );
+  });
+
+  it('inherits split logic exactly and leaves an empty note empty', () => {
+    const s = stateWithExpense({
+      note: '',
+      split: { mode: 'equal', shares: [{ who: 'you', amount: 300 }, { who: 'f1', amount: 200 }] },
+    });
+    const next = reducer(s, { type: 'DUPLICATE_TRANSACTION', id: 'tx1' });
+    expect(next.transactions[1].split).toEqual(s.transactions[0].split);
+    expect(next.transactions[1].note).toBe('');
+  });
+
+  it('is a safe no-op for an unknown id', () => {
+    const s = stateWithExpense();
+    const next = reducer(s, { type: 'DUPLICATE_TRANSACTION', id: 'nope' });
+    expect(next).toBe(s);
+  });
+
+  it('labels non-category transactions sensibly in the audit line', () => {
+    const s = createInitialState();
+    s.transactions.push({
+      id: 'tx_t',
+      ts: Date.now(),
+      type: 'transfer',
+      from: 'upi',
+      to: 'cash',
+      amount: 500,
+    });
+    const next = reducer(s, { type: 'DUPLICATE_TRANSACTION', id: 'tx_t' });
+    expect(next.auditLog[0].description).toBe(
+      'Duplicated transaction via swipe: Transfer - ₹500',
+    );
+  });
+});
+
 describe('backup round-trip', () => {
   it('preserves the audit log through serialize/parse', () => {
     const s = stateWithExpense();

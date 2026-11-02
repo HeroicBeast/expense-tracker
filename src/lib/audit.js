@@ -16,6 +16,7 @@ export const AUDIT_ACTIONS = {
   EDIT: 'edit',
   DELETE: 'delete',
   BALANCE: 'balance',
+  DUPLICATE: 'duplicate',
 };
 
 /** Transaction fields compared to decide whether an edit actually changed anything. */
@@ -99,4 +100,17 @@ export function describeTransactionContent(tx, categories = []) {
 export function describeBalanceChange(accountId, from, to) {
   const label = ACCOUNT_LABELS[accountId] || accountId;
   return `Changed ${label} starting balance from ${formatINR(from)} to ${formatINR(to)}`;
+}
+
+const TYPE_LABELS = {
+  transfer: 'Transfer',
+  income: 'Income',
+  settlement: 'Settlement',
+  forgive: 'Forgiveness',
+};
+
+/** "Duplicated transaction via swipe: Food - ₹500" — swipe-duplicate audit line. */
+export function describeDuplication(tx, categories = []) {
+  const label = categoryName(categories, tx.categoryId) || TYPE_LABELS[tx.type] || 'Transaction';
+  return `Duplicated transaction via swipe: ${label} - ${formatINR(tx.amount ?? 0)}`;
 }

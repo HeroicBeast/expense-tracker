@@ -5,6 +5,7 @@ import { round2 } from '../lib/money.js';
 import {
   AUDIT_ACTIONS,
   describeBalanceChange,
+  describeDuplication,
   describeTransactionContent,
   describeTransactionEdit,
   makeAuditEntry,
@@ -45,6 +46,22 @@ export function reducer(state, action) {
       const description = `Deleted transaction: ${describeTransactionContent(prev, state.categories)}`;
       return withAuditEntries({ ...state, transactions }, [
         makeAuditEntry(AUDIT_ACTIONS.DELETE, description),
+      ]);
+    }
+
+    case 'DUPLICATE_TRANSACTION': {
+      const src = state.transactions.find((t) => t.id === action.id);
+      if (!src) return state;
+      // Inherit everything (amount, category, account, split logic); the copy
+      // always lands on "now" and gets a "(Copy)" note suffix when it has one.
+      const copy = {
+        ...src,
+        id: newId('tx'),
+        ts: Date.now(),
+        note: src.note ? `${src.note} (Copy)` : '',
+      };
+      return withAuditEntries({ ...state, transactions: [...state.transactions, copy] }, [
+        makeAuditEntry(AUDIT_ACTIONS.DUPLICATE, describeDuplication(copy, state.categories)),
       ]);
     }
 
@@ -194,6 +211,7 @@ export function AppProvider({ children }) {
         dispatch({ type: 'ADD_TRANSACTION', transaction: { id: newId('tx'), ts: Date.now(), ...tx } }),
       updateTransaction: (tx) => dispatch({ type: 'UPDATE_TRANSACTION', transaction: tx }),
       deleteTransaction: (id) => dispatch({ type: 'DELETE_TRANSACTION', id }),
+      duplicateTransaction: (id) => dispatch({ type: 'DUPLICATE_TRANSACTION', id }),
 
       addFriend: (name, startingBalance = 0) =>
         dispatch({ type: 'ADD_FRIEND', name, startingBalance }),
