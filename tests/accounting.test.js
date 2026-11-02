@@ -12,7 +12,7 @@ import {
   friendSummary,
 } from '../src/lib/selectors.js';
 import { equalShares, computeShares } from '../src/lib/split.js';
-import { serializeBackup, parseBackup, buildCSV } from '../src/lib/exporters.js';
+import { serializeBackup, parseBackup } from '../src/lib/exporters.js';
 import { round2 } from '../src/lib/money.js';
 
 const D = (y, m, d, h = 12) => new Date(y, m - 1, d, h, 0, 0).getTime();
@@ -393,7 +393,7 @@ describe('split computation (equal, manual, itemized)', () => {
   });
 });
 
-describe('backup export / import and CSV', () => {
+describe('backup export / import', () => {
   it('round-trips the full state through a JSON backup', () => {
     const s = withFriends(baseState(), ['A', 'B']);
     s.transactions = [
@@ -413,16 +413,5 @@ describe('backup export / import and CSV', () => {
   it('rejects garbage backups with a readable error', () => {
     expect(() => parseBackup('not json')).toThrow(/valid JSON/i);
     expect(() => parseBackup('{"foo":1}')).toThrow(/missing transactions/i);
-  });
-
-  it('produces a CSV with one row per transaction', () => {
-    const s = withFriends(baseState(), ['A']);
-    s.transactions = [splitYouPaid()];
-    const csv = buildCSV(s);
-    const lines = csv.trim().split('\n');
-    expect(lines).toHaveLength(2);
-    expect(lines[0]).toContain('Your Spend (INR)');
-    expect(lines[1]).toContain('Expense');
-    expect(lines[1]).toContain('300.00');
   });
 });

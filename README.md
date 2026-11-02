@@ -26,8 +26,10 @@ device. No accounts, no servers, no tracking.
   chart (fixed overheads strictly excluded), daily spend trend with a
   cumulative budget-pace line, and a fixed/variable/remaining breakdown.
 - **Settings** — monthly budget, starting balances, category add / rename /
-  reorder / "exclude from bar chart" toggle, plus 1-tap **JSON export/import**
-  and **CSV export**.
+  reorder / "exclude from bar chart" toggle, 1-tap **JSON export/import**, and
+  a **Markdown financial report generator**: pick a date range and get a
+  client-side `.md` report (executive summary, category breakdown, outstanding
+  friend balances, itemized transactions) — zero document libraries.
 - **PWA** — `manifest.json` (standalone, portrait, `#09090B`), generated
   192/512 icons + maskable, and a service worker that caches the app shell for
   instant, zero-connectivity launches on Android Chrome ("Add to Home Screen").
@@ -77,5 +79,6 @@ sub-path (`https://<user>.github.io/<repo>/`) and refreshes never 404.
 
 Everything is stored locally (IndexedDB with a localStorage mirror). Use
 **Settings → Export JSON Backup** before clearing browser data or switching
-devices; **Import JSON Backup** restores the complete state. CSV export gives
-a spreadsheet-friendly transaction log.
+devices; **Import JSON Backup** restores the complete state. **Generate
+Financial Report** produces a dated Markdown report of any period directly in
+the browser (template literals + `Blob` download, nothing leaves the device).

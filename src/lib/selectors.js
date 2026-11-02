@@ -210,6 +210,46 @@ export function monthSpend(state, monthKey, { now = Date.now() } = {}) {
   return result;
 }
 
+/**
+ * Personal consumption for an arbitrary date range (YYYY-MM-DD keys, local
+ * time, inclusive) — powers the Markdown financial report.
+ * Same semantics as `monthSpend`: forgiveness counts, transfers/settlements
+ * never do; overheads are flagged separately from variable spend.
+ */
+export function rangeSpend(state, startKey, endKey) {
+  const cats = categoryMap(state);
+  const result = {
+    startKey,
+    endKey,
+    total: 0,
+    variable: 0,
+    overhead: 0,
+    byCategory: {},
+    hasData: false,
+  };
+  for (const tx of state.transactions) {
+    const key = dateKey(tx.ts);
+    if (key < startKey || key > endKey) continue;
+    const spend = personalSpendOf(tx);
+    if (spend <= 0) continue;
+    result.hasData = true;
+    result.total = round2(result.total + spend);
+
+    const catId = tx.type === 'forgive' ? (tx.categoryId ?? MISC_CATEGORY_ID) : tx.categoryId;
+    const cat = catId ? cats.get(catId) : null;
+    if (catId) result.byCategory[catId] = round2((result.byCategory[catId] ?? 0) + spend);
+    if (cat?.excludeFromBarChart) {
+      result.overhead = round2(result.overhead + spend);
+    } else {
+      result.variable = round2(result.variable + spend);
+    }
+  }
+  for (const c of state.categories) {
+    if (result.byCategory[c.id] === undefined) result.byCategory[c.id] = 0;
+  }
+  return result;
+}
+
 /** Personal consumption booked today (local time). */
 export function todaySpend(state, now = Date.now()) {
   const key = todayKey(now);

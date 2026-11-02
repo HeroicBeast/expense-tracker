@@ -2,7 +2,7 @@
 // End-to-end UI smoke tests: render the real <App/>, drive the real modals,
 // and assert that derived state (today's spend, account pills, list rows,
 // friend nets) updates correctly.
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/react';
 import App from '../src/App.jsx';
@@ -117,10 +117,73 @@ describe('analytics & settings screens', () => {
     expect(screen.getByText('Categories')).toBeInTheDocument();
     expect(screen.getByText('Export JSON Backup')).toBeInTheDocument();
     expect(screen.getByText('Import JSON Backup')).toBeInTheDocument();
-    expect(screen.getByText('Export CSV')).toBeInTheDocument();
+    expect(screen.getByText('Generate Financial Report')).toBeInTheDocument();
     // All 10 pre-loaded categories are editable here.
     expect(screen.getByDisplayValue('Food')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Househelp')).toBeInTheDocument();
+  });
+});
+
+describe('financial report flow', () => {
+  it('opens the date picker and shows the red inline error when the period has no data', async () => {
+    await renderApp();
+
+    fireEvent.click(screen.getByText('Settings'));
+    fireEvent.click(await screen.findByText('Generate Financial Report'));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByLabelText('Start Date')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('End Date')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Generate' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+
+    // Fresh ledger → zero transactions in range → mandated error, no file.
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Generate' }));
+    await within(dialog).findByText('No data found for this selected period.');
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('No data found for this selected period.');
+    // Modal stays open so the user can adjust the dates.
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('generates and downloads a .md report when the period contains data', async () => {
+    // jsdom has no Blob URL support — stub the download plumbing.
+    const createObjectURL = vi.fn(() => 'blob:financial-report');
+    const revokeObjectURL = vi.fn();
+    window.URL.createObjectURL = createObjectURL;
+    window.URL.revokeObjectURL = revokeObjectURL;
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+    try {
+      await renderApp();
+
+      // Create one in-range expense so the period is not empty.
+      fireEvent.click(screen.getByLabelText('Add transaction'));
+      const txDialog = await screen.findByRole('dialog');
+      fireEvent.change(within(txDialog).getByPlaceholderText('0'), { target: { value: '420' } });
+      fireEvent.click(within(txDialog).getByText('Save Expense'));
+      await waitFor(() => expect(heroSpend()).toBe('₹420'));
+
+      fireEvent.click(screen.getByText('Settings'));
+      fireEvent.click(await screen.findByText('Generate Financial Report'));
+      const dialog = await screen.findByRole('dialog');
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Generate' }));
+
+      await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
+      const blob = createObjectURL.mock.calls[0][0];
+      expect(blob).toBeInstanceOf(Blob);
+      expect(blob.size).toBeGreaterThan(0);
+      expect(blob.type).toContain('text/markdown');
+      // Report downloads and the modal closes.
+      expect(clickSpy).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole('dialog')).toBeNull();
+    } finally {
+      clickSpy.mockRestore();
+      delete window.URL.createObjectURL;
+      delete window.URL.revokeObjectURL;
+    }
   });
 });
 

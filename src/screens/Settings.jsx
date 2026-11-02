@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Download,
   Upload,
-  FileSpreadsheet,
+  FileText,
   Trash2,
   ChevronUp,
   ChevronDown,
@@ -13,7 +13,8 @@ import CategoryIcon from '../components/CategoryIcon.jsx';
 import { useApp } from '../store/AppContext.jsx';
 import { ACCOUNTS, MISC_CATEGORY_ID } from '../lib/defaults.js';
 import { parseAmount, round2 } from '../lib/money.js';
-import { exportJSON, exportCSV, parseBackup } from '../lib/exporters.js';
+import { exportJSON, parseBackup } from '../lib/exporters.js';
+import ReportModal from '../components/ReportModal.jsx';
 
 function Toggle({ checked, onChange, label }) {
   return (
@@ -124,6 +125,7 @@ export default function Settings() {
   const [newCatName, setNewCatName] = useState('');
   const [newCatOverhead, setNewCatOverhead] = useState(false);
   const [message, setMessage] = useState('');
+  const [reportOpen, setReportOpen] = useState(false);
   const fileRef = useRef(null);
   const messageTimer = useRef(null);
 
@@ -332,11 +334,11 @@ export default function Settings() {
           </button>
           <button
             type="button"
-            onClick={() => exportCSV(state)}
+            onClick={() => setReportOpen(true)}
             className="flex items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-800/50 py-3 text-sm font-semibold text-zinc-200 transition active:scale-[0.99]"
           >
-            <FileSpreadsheet className="h-4 w-4" />
-            Export CSV
+            <FileText className="h-4 w-4" />
+            Generate Financial Report
           </button>
           <input
             ref={fileRef}
@@ -354,6 +356,8 @@ export default function Settings() {
           </span>
         </div>
       </Section>
+
+      <ReportModal open={reportOpen} onClose={() => setReportOpen(false)} />
 
       <div className="h-6" />
     </div>

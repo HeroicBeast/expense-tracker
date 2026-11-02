@@ -1,7 +1,5 @@
-// JSON backup / restore and CSV export helpers.
+// JSON backup / restore and generic Blob download helpers.
 
-import { ACCOUNT_LABELS, MISC_CATEGORY_ID } from './defaults.js';
-import { personalSpendOf, formatDateTime, monthKeyOf } from './selectors.js';
 import { round2 } from './money.js';
 
 export const BACKUP_FORMAT = 'expense-tracker-backup';
@@ -67,99 +65,7 @@ export function parseBackup(text) {
   };
 }
 
-function csvCell(value) {
-  const s = value === null || value === undefined ? '' : String(value);
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
-/** One row per transaction — friendly for spreadsheets. */
-export function buildCSV(state) {
-  const catById = new Map(state.categories.map((c) => [c.id, c]));
-  const friendById = new Map(state.friends.map((f) => [f.id, f]));
-
-  const header = [
-    'Date',
-    'Time',
-    'Type',
-    'Category',
-    'Note',
-    'Account',
-    'Cash Flow (INR)',
-    'Your Spend (INR)',
-    'Counterparty',
-    'Details',
-  ];
-
-  const rows = [...state.transactions]
-    .sort((a, b) => a.ts - b.ts)
-    .map((tx) => {
-      const d = new Date(tx.ts);
-      const date = d.toLocaleDateString('en-CA');
-      const time = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
-      const spend = personalSpendOf(tx);
-      let type = 'Expense';
-      let category = '';
-      let account = '';
-      let cashFlow = 0;
-      let counterparty = '';
-      let details = tx.note || '';
-
-      if (tx.type === 'expense') {
-        category = catById.get(tx.categoryId)?.name ?? '';
-        if (tx.paidBy === 'friend') {
-          type = 'Expense (friend paid)';
-          counterparty = friendById.get(tx.friendId)?.name ?? '';
-          cashFlow = 0;
-          details = details || `Friend paid; your share ₹${tx.yourShare}`;
-        } else {
-          account = ACCOUNT_LABELS[tx.accountId] ?? tx.accountId;
-          cashFlow = -round2(tx.amount);
-          if (tx.split?.shares) {
-            const parts = tx.split.shares
-              .map((s) => `${s.who === 'you' ? 'You' : friendById.get(s.who)?.name ?? s.who}: ₹${s.amount}`)
-              .join(' | ');
-            details = details ? `${details} — split: ${parts}` : `split: ${parts}`;
-          }
-        }
-      } else if (tx.type === 'transfer') {
-        type = 'Transfer (internal)';
-        account = `${ACCOUNT_LABELS[tx.from]} → ${ACCOUNT_LABELS[tx.to]}`;
-        cashFlow = 0;
-      } else if (tx.type === 'income') {
-        type = 'Add balance / income';
-        account = ACCOUNT_LABELS[tx.accountId] ?? tx.accountId;
-        cashFlow = round2(tx.amount);
-      } else if (tx.type === 'settlement') {
-        type = tx.direction === 'received' ? 'Settle (received)' : 'Settle (paid)';
-        account = ACCOUNT_LABELS[tx.accountId] ?? tx.accountId;
-        counterparty = friendById.get(tx.friendId)?.name ?? '';
-        cashFlow = tx.direction === 'received' ? round2(tx.amount) : -round2(tx.amount);
-      } else if (tx.type === 'forgive') {
-        type = 'Forgiven debt';
-        category = catById.get(tx.categoryId)?.name ?? catById.get(MISC_CATEGORY_ID)?.name ?? 'Miscellaneous';
-        counterparty = friendById.get(tx.friendId)?.name ?? '';
-        cashFlow = 0;
-      }
-
-      return [
-        date,
-        time,
-        type,
-        category,
-        tx.note || '',
-        account,
-        cashFlow.toFixed(2),
-        spend.toFixed(2),
-        counterparty,
-        details,
-      ]
-        .map(csvCell)
-        .join(',');
-    });
-
-  return [header.join(','), ...rows].join('\n');
-}
-
+/** Trigger a client-side file download from an in-memory string. */
 export function downloadFile(filename, content, mime) {
   const blob = new Blob([content], { type: mime });
   const url = URL.createObjectURL(blob);
@@ -175,9 +81,4 @@ export function downloadFile(filename, content, mime) {
 export function exportJSON(state) {
   const stamp = new Date().toISOString().slice(0, 10);
   downloadFile(`expense-tracker-backup-${stamp}.json`, serializeBackup(state), 'application/json');
-}
-
-export function exportCSV(state) {
-  const stamp = monthKeyOf(Date.now());
-  downloadFile(`expense-tracker-transactions-${stamp}.csv`, buildCSV(state), 'text/csv;charset=utf-8');
 }
