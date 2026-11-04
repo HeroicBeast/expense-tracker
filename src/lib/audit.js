@@ -17,6 +17,7 @@ export const AUDIT_ACTIONS = {
   DELETE: 'delete',
   BALANCE: 'balance',
   DUPLICATE: 'duplicate',
+  FORGIVE: 'forgive',
 };
 
 /** Transaction fields compared to decide whether an edit actually changed anything. */
@@ -113,4 +114,16 @@ const TYPE_LABELS = {
 export function describeDuplication(tx, categories = []) {
   const label = categoryName(categories, tx.categoryId) || TYPE_LABELS[tx.type] || 'Transaction';
   return `Duplicated transaction via swipe: ${label} - ${formatINR(tx.amount ?? 0)}`;
+}
+
+/**
+ * Forgiveness audit line — both directions are recorded distinctly:
+ *   "Forgave ₹50 owed by friend"       (direction 'given' → Misc expense)
+ *   "Friend forgave ₹50 owed by you"   (direction 'received' → zero-cashflow)
+ */
+export function describeForgiveness(tx) {
+  const amount = formatINR(tx.amount ?? 0);
+  return tx.direction === 'received'
+    ? `Friend forgave ${amount} owed by you`
+    : `Forgave ${amount} owed by friend`;
 }

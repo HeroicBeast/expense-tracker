@@ -85,12 +85,15 @@ export default function TransactionRow({ tx, category, friend, onOpen, onDuplica
   } else if (tx.type === 'forgive') {
     Icon = Undo2;
     iconName = null;
-    title = 'Forgiven Debt';
+    // 'received' = the friend forgave YOUR debt: a neutral ledger adjustment
+    // (never a penalty — the cost already hit the budget at purchase time).
+    const received = tx.direction === 'received';
+    title = received ? 'Forgiven by Friend' : 'Forgiven Debt';
     badge = 'No cash flow';
     main = formatINR(tx.amount);
-    mainClass = 'text-amber-400';
+    mainClass = received ? 'text-zinc-400' : 'text-amber-400';
     sub = tx.note || (friend ? `Forgiven debt - ${friend.name}` : 'Debt forgiveness');
-    sub = `${sub} · books as spend`;
+    sub = received ? `${sub} · zero budget impact` : `${sub} · books as spend`;
   } else {
     main = formatINR(tx.amount || 0);
   }

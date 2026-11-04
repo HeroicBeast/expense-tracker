@@ -96,7 +96,14 @@ export function sortOldestFirst(txs) {
  * Today's Spend, the Monthly Budget and Analytics.
  */
 export function personalSpendOf(tx) {
-  if (tx.type === 'forgive') return round2(tx.amount);
+  if (tx.type === 'forgive') {
+    // 'received' (the friend forgave YOUR debt) is a pure ledger adjustment:
+    // the cost already hit the budget when the original expense was logged,
+    // so it must NEVER count again — zero impact on Today's Spend / budget.
+    // 'given' (you forgave their debt) stays a real expense: you absorb the
+    // loss. Legacy records without a direction behave as 'given'.
+    return tx.direction === 'received' ? 0 : round2(tx.amount);
+  }
   if (tx.type !== 'expense') return 0;
   if (tx.paidBy === 'friend') return round2(tx.yourShare ?? 0);
   if (tx.split?.shares?.length) {
@@ -168,7 +175,13 @@ export function computeFriendBalances(state) {
         );
       }
     } else if (tx.type === 'forgive') {
-      if (tx.friendId in nets) nets[tx.friendId] = round2(nets[tx.friendId] - round2(tx.amount));
+      if (tx.friendId in nets) {
+        // 'given' (default): their debt shrinks by the amount.
+        // 'received': YOUR debt shrinks — the net moves back up toward 0.
+        nets[tx.friendId] = round2(
+          nets[tx.friendId] + (tx.direction === 'received' ? round2(tx.amount) : -round2(tx.amount)),
+        );
+      }
     }
   }
   return nets;
@@ -234,8 +247,9 @@ export function monthSpend(state, monthKey, { now = Date.now() } = {}) {
 /**
  * Personal consumption for an arbitrary date range (YYYY-MM-DD keys, local
  * time, inclusive) — powers the Markdown financial report.
- * Same semantics as `monthSpend`: forgiveness counts, transfers/settlements
- * never do; overheads are flagged separately from variable spend.
+ * Same semantics as `monthSpend`: your forgiveness of a friend's debt counts
+ * (it absorbs the loss), but a debt they forgave YOU never does — nor do
+ * transfers/settlements. Overheads are flagged separately from variable spend.
  */
 export function rangeSpend(state, startKey, endKey) {
   const cats = categoryMap(state);
@@ -377,7 +391,7 @@ export function friendEffectOf(tx, friendId) {
     return tx.direction === 'received' ? -round2(tx.amount) : round2(tx.amount);
   }
   if (tx.type === 'forgive' && tx.friendId === friendId) {
-    return -round2(tx.amount);
+    return tx.direction === 'received' ? round2(tx.amount) : -round2(tx.amount);
   }
   return 0;
 }

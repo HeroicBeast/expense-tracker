@@ -72,9 +72,10 @@ function describeEntry(tx, friendName, categoryById, effect) {
     };
   }
   if (tx.type === 'forgive') {
+    const received = tx.direction === 'received';
     return {
-      title: 'Forgiven debt',
-      sub: tx.note || `Forgiven debt - ${friendName}`,
+      title: received ? 'Friend forgave debt' : 'Forgiven debt',
+      sub: tx.note || (received ? `Round off - ${friendName}` : `Forgiven debt - ${friendName}`),
       icon: null,
       isCategory: false,
     };
@@ -251,9 +252,9 @@ export default function Friends() {
                   <button
                     type="button"
                     onClick={() => setForgiveFor(f.id)}
-                    disabled={net <= 0}
+                    disabled={Math.abs(net) < 0.005}
                     className="flex items-center justify-center gap-1.5 bg-zinc-900 py-2.5 text-xs font-semibold text-zinc-300 transition active:bg-zinc-800 disabled:cursor-not-allowed disabled:text-zinc-600"
-                    title={net <= 0 ? 'Nothing to forgive' : 'Forgive / round off debt'}
+                    title={Math.abs(net) < 0.005 ? 'Nothing to round off' : 'Forgive / round off debt'}
                   >
                     <Undo2 className="h-3.5 w-3.5 text-amber-400" />
                     Forgive / Round Off
@@ -334,7 +335,7 @@ export default function Friends() {
               <button
                 type="button"
                 onClick={() => setForgiveFor(detailFriend.id)}
-                disabled={(summary.nets[detailFriend.id] ?? 0) <= 0}
+                disabled={Math.abs(summary.nets[detailFriend.id] ?? 0) < 0.005}
                 className="flex-1 rounded-xl border border-amber-500/40 bg-amber-500/10 py-2.5 text-xs font-bold text-amber-400 transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Forgive / Round Off

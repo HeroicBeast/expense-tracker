@@ -181,6 +181,76 @@ describe('friend ledger: settlements, netting and forgiveness', () => {
     expect(spend.byCategory[MISC_CATEGORY_ID]).toBe(20);
   });
 
+  it('friend-paid share hits the budget immediately; forgiveness received NEVER hits it a second time', () => {
+    const s = withFriends(baseState(), ['A']);
+    s.transactions = [
+      {
+        id: 'fp1',
+        ts: D(2026, 11, 5),
+        type: 'expense',
+        paidBy: 'friend',
+        friendId: 'f_A',
+        accountId: 'upi',
+        amount: 100,
+        yourShare: 100,
+        categoryId: 'food',
+        note: '',
+      },
+      {
+        id: 'fg_you',
+        ts: D(2026, 11, 6),
+        type: 'forgive',
+        amount: 100,
+        friendId: 'f_A',
+        categoryId: MISC_CATEGORY_ID,
+        note: 'Round off - A',
+        direction: 'received',
+      },
+    ];
+
+    // The purchase already charged the budget once (your share)…
+    expect(personalSpendOf(s.transactions[0])).toBe(100);
+
+    // …and the forgiveness received charges NOTHING: no second hit, no credit.
+    expect(personalSpendOf(s.transactions[1])).toBe(0);
+    const spend = monthSpend(s, '2026-11');
+    expect(spend.total).toBe(100); // exactly the original share — not 200, not 0
+    expect(spend.byCategory[MISC_CATEGORY_ID] ?? 0).toBe(0); // no Misc booking
+
+    // Ledger: your ₹100 debt is wiped — net back to 0.
+    expect(computeFriendBalances(s).f_A).toBe(0);
+
+    // Zero cash flow: every account untouched.
+    expect(computeAccountBalances(s)).toEqual({ upi: 10000, upiLite: 2000, cash: 500 });
+
+    // Ledger running balance: −100 → 0 via the round-off row.
+    const ledger = friendLedger(s, 'f_A');
+    expect(ledger[ledger.length - 1].running).toBe(0);
+  });
+
+  it("direction 'given' forgiveness still counts as personal expense (you absorb the loss)", () => {
+    const s = withFriends(baseState(), ['A']);
+    s.transactions = [
+      {
+        id: 'g1',
+        ts: D(2026, 11, 7),
+        type: 'forgive',
+        amount: 50,
+        friendId: 'f_A',
+        categoryId: MISC_CATEGORY_ID,
+        note: 'Forgiven debt - A',
+        direction: 'given',
+      },
+    ];
+    expect(personalSpendOf(s.transactions[0])).toBe(50);
+    const spend = monthSpend(s, '2026-11');
+    expect(spend.total).toBe(50);
+    expect(spend.byCategory[MISC_CATEGORY_ID]).toBe(50);
+    // …but still zero cash flow and their debt shrinks.
+    expect(computeAccountBalances(s)).toEqual({ upi: 10000, upiLite: 2000, cash: 500 });
+    expect(computeFriendBalances(s).f_A).toBe(-50);
+  });
+
   it('initial balance migrates pre-app debt into the ledger ONLY', () => {
     const s = withFriends(baseState(), ['A']);
     s.friends[0].startingBalance = 400;
