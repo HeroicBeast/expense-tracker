@@ -6,6 +6,7 @@ import {
   AUDIT_ACTIONS,
   describeBalanceChange,
   describeDuplication,
+  describeForgiveness,
   describeTransactionContent,
   describeTransactionEdit,
   makeAuditEntry,
@@ -22,8 +23,14 @@ export function reducer(state, action) {
     case 'REPLACE_STATE':
       return action.state;
 
-    case 'ADD_TRANSACTION':
-      return { ...state, transactions: [...state.transactions, action.transaction] };
+    case 'ADD_TRANSACTION': {
+      const next = { ...state, transactions: [...state.transactions, action.transaction] };
+      // Forgiveness is a sensitive ledger event — audit BOTH directions.
+      if (action.transaction.type !== 'forgive') return next;
+      return withAuditEntries(next, [
+        makeAuditEntry(AUDIT_ACTIONS.FORGIVE, describeForgiveness(action.transaction)),
+      ]);
+    }
 
     case 'UPDATE_TRANSACTION': {
       const prev = state.transactions.find((t) => t.id === action.transaction.id);
@@ -52,14 +59,9 @@ export function reducer(state, action) {
     case 'DUPLICATE_TRANSACTION': {
       const src = state.transactions.find((t) => t.id === action.id);
       if (!src) return state;
-      // Inherit everything (amount, category, account, split logic); the copy
-      // always lands on "now" and gets a "(Copy)" note suffix when it has one.
-      const copy = {
-        ...src,
-        id: newId('tx'),
-        ts: Date.now(),
-        note: src.note ? `${src.note} (Copy)` : '',
-      };
+      // Inherit everything verbatim — amount, category, account, split logic
+      // and the exact note string — but the copy always lands on "now".
+      const copy = { ...src, id: newId('tx'), ts: Date.now() };
       return withAuditEntries({ ...state, transactions: [...state.transactions, copy] }, [
         makeAuditEntry(AUDIT_ACTIONS.DUPLICATE, describeDuplication(copy, state.categories)),
       ]);

@@ -157,7 +157,7 @@ describe('audit helpers', () => {
 });
 
 describe('duplicate (swipe) trigger', () => {
-  it('clones the transaction with a fresh id, "now" timestamp, "(Copy)" note and an audit entry', () => {
+  it('clones the transaction with a fresh id, "now" timestamp, the verbatim note and an audit entry', () => {
     const s = stateWithExpense({ note: 'Weekly groceries' });
     const before = s.transactions[0];
     const startedAt = Date.now();
@@ -173,7 +173,7 @@ describe('duplicate (swipe) trigger', () => {
     expect(copy.accountId).toBe('upi');
     expect(copy.paidBy).toBe('you');
     expect(copy.ts).toBeGreaterThanOrEqual(startedAt); // dated right now
-    expect(copy.note).toBe('Weekly groceries (Copy)');
+    expect(copy.note).toBe('Weekly groceries'); // inherited verbatim — no "(Copy)" suffix
 
     expect(next.auditLog).toHaveLength(1);
     expect(next.auditLog[0].action).toBe('duplicate');
@@ -212,6 +212,47 @@ describe('duplicate (swipe) trigger', () => {
     expect(next.auditLog[0].description).toBe(
       'Duplicated transaction via swipe: Transfer - ₹500',
     );
+  });
+});
+
+describe('forgiveness audit (both directions)', () => {
+  const forgiveTx = (over = {}) => ({
+    id: 'fg1',
+    ts: Date.now(),
+    type: 'forgive',
+    amount: 50,
+    friendId: 'f1',
+    categoryId: 'miscellaneous',
+    note: '',
+    ...over,
+  });
+
+  it('records "Forgave ₹50 owed by friend" when you forgive their debt', () => {
+    const s = createInitialState();
+    const next = reducer(s, {
+      type: 'ADD_TRANSACTION',
+      transaction: forgiveTx({ direction: 'owed_by_friend' }),
+    });
+    expect(next.auditLog).toHaveLength(1);
+    expect(next.auditLog[0].action).toBe('forgive');
+    expect(next.auditLog[0].description).toBe('Forgave ₹50 owed by friend');
+  });
+
+  it('records "Friend forgave ₹50 owed by you" when they forgive yours', () => {
+    const s = createInitialState();
+    const next = reducer(s, {
+      type: 'ADD_TRANSACTION',
+      transaction: forgiveTx({ direction: 'owed_by_you' }),
+    });
+    expect(next.auditLog).toHaveLength(1);
+    expect(next.auditLog[0].action).toBe('forgive');
+    expect(next.auditLog[0].description).toBe('Friend forgave ₹50 owed by you');
+  });
+
+  it('treats legacy forgiveness records (no direction field) as "you forgave them"', () => {
+    const s = createInitialState();
+    const next = reducer(s, { type: 'ADD_TRANSACTION', transaction: forgiveTx() });
+    expect(next.auditLog[0].description).toBe('Forgave ₹50 owed by friend');
   });
 });
 

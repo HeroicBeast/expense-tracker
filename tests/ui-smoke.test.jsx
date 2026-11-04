@@ -464,11 +464,10 @@ describe('swipe left to duplicate', () => {
       swipeLeft(row, -400);
       expect(vibrate).toHaveBeenCalledWith(50); // light haptic exactly once
 
-      // Duplicate lands: same amount + category, note gets "(Copy)", hero doubles.
+      // Duplicate lands: same amount + category + verbatim note, hero doubles.
       await waitFor(() => expect(heroSpend()).toBe('₹1,000'));
       expect(screen.getAllByText('Groceries')).toHaveLength(2);
-      expect(screen.getByText('Weekly groceries')).toBeInTheDocument();
-      expect(screen.getByText('Weekly groceries (Copy)')).toBeInTheDocument();
+      expect(screen.getAllByText('Weekly groceries')).toHaveLength(2); // both rows, no "(Copy)"
 
       // Audit log carries the spec wording.
       fireEvent.click(screen.getByText('Settings'));
@@ -597,5 +596,64 @@ describe('swipe right to delete with undo', () => {
     expect(screen.queryByText('Deleted.')).toBeNull();
     expect(screen.getAllByText('Food')).toHaveLength(1);
     expect(heroSpend()).toBe('₹250');
+  });
+});
+
+describe('bi-directional forgiveness', () => {
+  it('lets a friend forgive your debt as a zero-cashflow round-off with an audit entry', async () => {
+    await renderApp();
+
+    // A personal expense first, so "no budget impact" is provable later.
+    fireEvent.click(screen.getByLabelText('Add transaction'));
+    let txDialog = await screen.findByRole('dialog');
+    fireEvent.change(within(txDialog).getByPlaceholderText('0'), { target: { value: '250' } });
+    fireEvent.click(within(txDialog).getByText('Save Expense'));
+    await waitFor(() => expect(heroSpend()).toBe('₹250'));
+
+    // Vikram: you owe him ₹100 via the ledger-only Initial Balance seed.
+    fireEvent.click(screen.getByText('Friends'));
+    fireEvent.click(screen.getAllByText('Add Friend')[0]);
+    const addDialog = await screen.findByRole('dialog');
+    fireEvent.change(within(addDialog).getByPlaceholderText("Friend's name"), {
+      target: { value: 'Vikram' },
+    });
+    fireEvent.change(within(addDialog).getByLabelText(/Initial Balance/), {
+      target: { value: '100' },
+    });
+    fireEvent.click(within(addDialog).getByText('I owe them'));
+    fireEvent.click(within(addDialog).getByRole('button', { name: 'Add Friend' }));
+    // −₹100 appears in the summary net AND the friend row pill.
+    const owing = await screen.findAllByText('−₹100');
+    expect(owing.length).toBeGreaterThanOrEqual(1);
+
+    // The Forgive button is ENABLED even though YOU owe (net < 0).
+    const forgiveBtn = screen.getByRole('button', { name: 'Forgive / Round Off' });
+    expect(forgiveBtn).toBeEnabled();
+    fireEvent.click(forgiveBtn);
+
+    const dialog = await screen.findByRole('dialog');
+    // Direction defaults to "They Forgive Me"; the full debt is prefilled.
+    expect(within(dialog).getByRole('button', { name: 'They Forgive Me' })).toBeEnabled();
+    expect(within(dialog).getByRole('button', { name: 'I Forgive Them' })).toBeDisabled();
+    expect(within(dialog).getByPlaceholderText('0')).toHaveValue('100');
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Round Off — Zero Cash Flow' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    // Strictly a ledger adjustment: debt gone, nothing logged against budget.
+    await screen.findByText('settled up');
+    expect(screen.queryByText('−₹100')).toBeNull();
+
+    fireEvent.click(screen.getByText('Home'));
+    await waitFor(() => expect(heroSpend()).toBe('₹250')); // unchanged — no Misc expense
+    expect(screen.queryByText('−₹350')).toBeNull(); // accounts untouched
+
+    // Audit log records the bi-directional wording.
+    fireEvent.click(screen.getByText('Settings'));
+    fireEvent.click(await screen.findByRole('button', { name: 'View Audit Log' }));
+    const auditDialog = await screen.findByRole('dialog');
+    expect(
+      within(auditDialog).getByText('Friend forgave ₹100 owed by you'),
+    ).toBeInTheDocument();
   });
 });
