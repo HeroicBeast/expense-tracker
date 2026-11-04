@@ -24,11 +24,18 @@ export function reducer(state, action) {
       return action.state;
 
     case 'ADD_TRANSACTION': {
-      const next = { ...state, transactions: [...state.transactions, action.transaction] };
+      // Schema: every forgive record carries an explicit direction —
+      // 'given' (you forgave their debt → personal expense) or
+      // 'received' (they forgave yours → zero-cashflow ledger only).
+      const tx =
+        action.transaction.type === 'forgive' && !action.transaction.direction
+          ? { ...action.transaction, direction: 'given' }
+          : action.transaction;
+      const next = { ...state, transactions: [...state.transactions, tx] };
       // Forgiveness is a sensitive ledger event — audit BOTH directions.
-      if (action.transaction.type !== 'forgive') return next;
+      if (tx.type !== 'forgive') return next;
       return withAuditEntries(next, [
-        makeAuditEntry(AUDIT_ACTIONS.FORGIVE, describeForgiveness(action.transaction)),
+        makeAuditEntry(AUDIT_ACTIONS.FORGIVE, describeForgiveness(tx)),
       ]);
     }
 

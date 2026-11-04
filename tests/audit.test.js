@@ -231,7 +231,7 @@ describe('forgiveness audit (both directions)', () => {
     const s = createInitialState();
     const next = reducer(s, {
       type: 'ADD_TRANSACTION',
-      transaction: forgiveTx({ direction: 'owed_by_friend' }),
+      transaction: forgiveTx({ direction: 'given' }),
     });
     expect(next.auditLog).toHaveLength(1);
     expect(next.auditLog[0].action).toBe('forgive');
@@ -242,7 +242,7 @@ describe('forgiveness audit (both directions)', () => {
     const s = createInitialState();
     const next = reducer(s, {
       type: 'ADD_TRANSACTION',
-      transaction: forgiveTx({ direction: 'owed_by_you' }),
+      transaction: forgiveTx({ direction: 'received' }),
     });
     expect(next.auditLog).toHaveLength(1);
     expect(next.auditLog[0].action).toBe('forgive');

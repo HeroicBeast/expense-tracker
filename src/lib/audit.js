@@ -118,12 +118,12 @@ export function describeDuplication(tx, categories = []) {
 
 /**
  * Forgiveness audit line — both directions are recorded distinctly:
- *   "Forgave ₹50 owed by friend"       (you forgive their debt → Misc expense)
- *   "Friend forgave ₹50 owed by you"   (they forgive yours → zero-cashflow)
+ *   "Forgave ₹50 owed by friend"       (direction 'given' → Misc expense)
+ *   "Friend forgave ₹50 owed by you"   (direction 'received' → zero-cashflow)
  */
 export function describeForgiveness(tx) {
   const amount = formatINR(tx.amount ?? 0);
-  return tx.direction === 'owed_by_you'
+  return tx.direction === 'received'
     ? `Friend forgave ${amount} owed by you`
     : `Forgave ${amount} owed by friend`;
 }

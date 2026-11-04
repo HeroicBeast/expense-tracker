@@ -97,9 +97,12 @@ export function sortOldestFirst(txs) {
  */
 export function personalSpendOf(tx) {
   if (tx.type === 'forgive') {
-    // A debt forgiven BY the friend (they erase what you owe) is a pure
-    // ledger adjustment — it must never touch your personal spend/budget.
-    return tx.direction === 'owed_by_you' ? 0 : round2(tx.amount);
+    // 'received' (the friend forgave YOUR debt) is a pure ledger adjustment:
+    // the cost already hit the budget when the original expense was logged,
+    // so it must NEVER count again — zero impact on Today's Spend / budget.
+    // 'given' (you forgave their debt) stays a real expense: you absorb the
+    // loss. Legacy records without a direction behave as 'given'.
+    return tx.direction === 'received' ? 0 : round2(tx.amount);
   }
   if (tx.type !== 'expense') return 0;
   if (tx.paidBy === 'friend') return round2(tx.yourShare ?? 0);
@@ -173,10 +176,10 @@ export function computeFriendBalances(state) {
       }
     } else if (tx.type === 'forgive') {
       if (tx.friendId in nets) {
-        // owed_by_friend (default): their debt shrinks by the amount.
-        // owed_by_you: YOUR debt shrinks — the net moves back up toward 0.
+        // 'given' (default): their debt shrinks by the amount.
+        // 'received': YOUR debt shrinks — the net moves back up toward 0.
         nets[tx.friendId] = round2(
-          nets[tx.friendId] + (tx.direction === 'owed_by_you' ? round2(tx.amount) : -round2(tx.amount)),
+          nets[tx.friendId] + (tx.direction === 'received' ? round2(tx.amount) : -round2(tx.amount)),
         );
       }
     }
@@ -388,7 +391,7 @@ export function friendEffectOf(tx, friendId) {
     return tx.direction === 'received' ? -round2(tx.amount) : round2(tx.amount);
   }
   if (tx.type === 'forgive' && tx.friendId === friendId) {
-    return tx.direction === 'owed_by_you' ? round2(tx.amount) : -round2(tx.amount);
+    return tx.direction === 'received' ? round2(tx.amount) : -round2(tx.amount);
   }
   return 0;
 }

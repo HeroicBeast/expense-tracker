@@ -648,6 +648,11 @@ describe('bi-directional forgiveness', () => {
     await waitFor(() => expect(heroSpend()).toBe('₹250')); // unchanged — no Misc expense
     expect(screen.queryByText('−₹350')).toBeNull(); // accounts untouched
 
+    // Row renders as a neutral ledger event, not an expense penalty.
+    expect(screen.getByText('Forgiven by Friend')).toBeInTheDocument();
+    expect(screen.getByText(/zero budget impact/)).toBeInTheDocument();
+    expect(screen.queryByText(/books as spend/)).toBeNull();
+
     // Audit log records the bi-directional wording.
     fireEvent.click(screen.getByText('Settings'));
     fireEvent.click(await screen.findByRole('button', { name: 'View Audit Log' }));

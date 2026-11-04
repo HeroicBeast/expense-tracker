@@ -72,10 +72,10 @@ function describeEntry(tx, friendName, categoryById, effect) {
     };
   }
   if (tx.type === 'forgive') {
-    const byThem = tx.direction === 'owed_by_you';
+    const received = tx.direction === 'received';
     return {
-      title: byThem ? 'Friend forgave debt' : 'Forgiven debt',
-      sub: tx.note || (byThem ? `Round off - ${friendName}` : `Forgiven debt - ${friendName}`),
+      title: received ? 'Friend forgave debt' : 'Forgiven debt',
+      sub: tx.note || (received ? `Round off - ${friendName}` : `Forgiven debt - ${friendName}`),
       icon: null,
       isCategory: false,
     };

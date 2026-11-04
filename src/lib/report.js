@@ -49,7 +49,7 @@ function itemizedLine(tx, categoryById, friendById) {
   if (tx.type === 'forgive') {
     const category = categoryById.get(tx.categoryId)?.name ?? 'Miscellaneous';
     const kind =
-      tx.direction === 'owed_by_you' ? 'Friend forgave debt, no cash flow' : 'Forgiven Debt, no cash flow';
+      tx.direction === 'received' ? 'Friend forgave debt, no cash flow' : 'Forgiven Debt, no cash flow';
     return `- **${day}**: ${category} - ${formatINR(tx.amount)} (${kind})${note}`;
   }
   return `- **${day}**: ${tx.type} - ${formatINR(tx.amount ?? 0)}${note}`;

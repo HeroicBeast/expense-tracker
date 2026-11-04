@@ -9,11 +9,11 @@ import { computeFriendBalances } from '../lib/selectors.js';
 /**
  * Bi-directional Forgive / Round Off a debt.
  *
- * Direction A — "I Forgive Them" (friend owes you): the forgiveness is a
+ * direction: 'given' — "I Forgive Them" (friend owes you): the forgiveness is a
  * personal expense booked under Miscellaneous, so the budget absorbs the
  * loss while the books stay reconciled (zero cash flow).
  *
- * Direction B — "They Forgive Me" (you owe the friend): a strict zero-cashflow
+ * direction: 'received' — "They Forgive Me" (you owe the friend): a strict zero-cashflow
  * ledger adjustment that shrinks your debt toward 0. It never touches
  * UPI / UPI Lite / Physical Cash and never counts against monthly budget.
  */
@@ -25,7 +25,7 @@ export default function ForgiveModal({ open, onClose, friendId, transaction }) {
   const net = round2(nets[targetFriendId] ?? 0); // + they owe you, − you owe them
 
   const [amount, setAmount] = useState('');
-  const [direction, setDirection] = useState('owed_by_friend'); // 'owed_by_friend' | 'owed_by_you'
+  const [direction, setDirection] = useState('given'); // 'given' | 'received'
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -38,15 +38,15 @@ export default function ForgiveModal({ open, onClose, friendId, transaction }) {
     // Legacy records carry no direction and were always "you forgave them".
     setDirection(
       transaction
-        ? transaction.direction || 'owed_by_friend'
+        ? transaction.direction || 'given'
         : net < 0
-          ? 'owed_by_you'
-          : 'owed_by_friend',
+          ? 'received'
+          : 'given',
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, transaction]);
 
-  const isByThem = direction === 'owed_by_you';
+  const isByThem = direction === 'received';
   // Forgiveness can never exceed the debt of the selected direction.
   const limit = round2(isByThem ? Math.max(0, -net) : Math.max(0, net));
   const amountNum = parseAmount(amount);
@@ -71,7 +71,7 @@ export default function ForgiveModal({ open, onClose, friendId, transaction }) {
     const note = isByThem
       ? `Round off - ${friend?.name || 'friend'}`
       : `Forgiven debt - ${friend?.name || 'friend'}`;
-    const savedDirection = isByThem ? 'owed_by_you' : 'owed_by_friend';
+    const savedDirection = isByThem ? 'received' : 'given';
     if (transaction) {
       updateTransaction({
         ...transaction,
@@ -94,7 +94,7 @@ export default function ForgiveModal({ open, onClose, friendId, transaction }) {
   };
 
   const handleDelete = () => {
-    const msg = transaction?.direction === 'owed_by_you'
+    const msg = transaction?.direction === 'received'
       ? 'Delete this round-off? The friend balance will be recalculated.'
       : 'Delete this forgiveness? The friend balance and your budget will be recalculated.';
     if (window.confirm(msg)) {
@@ -160,16 +160,16 @@ export default function ForgiveModal({ open, onClose, friendId, transaction }) {
             <button
               type="button"
               disabled={!transaction && net <= 0}
-              onClick={() => setDirection('owed_by_friend')}
-              className={chipClass(direction === 'owed_by_friend')}
+              onClick={() => setDirection('given')}
+              className={chipClass(direction === 'given')}
             >
               I Forgive Them
             </button>
             <button
               type="button"
               disabled={!transaction && net >= 0}
-              onClick={() => setDirection('owed_by_you')}
-              className={chipClass(direction === 'owed_by_you')}
+              onClick={() => setDirection('received')}
+              className={chipClass(direction === 'received')}
             >
               They Forgive Me
             </button>
